@@ -719,6 +719,13 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - 테스트: 결정 매트릭스 5건(정책 0/1/2 × 플래그 + 실패 폴백). decompress_stream 256MB bomb 가드 경유(보안 LOW도 커버).
 - 검증: lib 1289 tests, clippy clean.
 
+### R2 — 각주 참조 마커 본문 삽입 ✅
+- 문제: 각주 정의 블록은 만들되 본문에 `[^n]` 호출 마커가 없어 GFM 각주 링크가 끊김(convert.rs).
+- 제약 발견: `extract_paragraph_text`(reader.rs:421)가 inline control char(0x000E–0x001F)를 **위치 보존 없이 제거** → 정확한 호출 위치 복원 불가(핵심 추출 재작업은 고위험). best-effort로 문단 끝에 ref 부착.
+- 수정: `paragraph_to_staged_counted`에서 각주/미주 control을 분리 처리 — 같은 id의 `footnote_ref` inline을 본문에 추가 + 정의 블록을 본문 뒤 배치. dead가 된 `control_to_block_counted` 제거.
+- 테스트: ref id == def id + MD `[^footnote-1]`/`[^footnote-1]:` 렌더. 기존 sequential-id 테스트 호환.
+- 검증: lib 1290 tests, clippy clean.
+
 ---
 
 ## Sprint 98 — 2026-06-05

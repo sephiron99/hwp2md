@@ -285,7 +285,7 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 > 전부 expert-confirmed 실사용 충실도 결함. 착수는 사용자 승인 후.
 
 - **R1 (HIGH)**: ✅ (S99) HWP BinData 압축 해제 — `maybe_decompress_bin` 정책비트×문서플래그, raw 폴백. 결정 매트릭스 5 테스트.
-- **R2 (HIGH)**: 각주 참조 마커 본문 삽입 — HWP 본문 각주 위치에 `[^n]` inline(IR/MD 인프라 기존). convert.rs:470.
+- **R2 (HIGH)**: ✅ (S99) 각주 참조 마커 본문 삽입 — 문단 끝 best-effort `footnote_ref`(위치는 extract가 control char 제거로 복원 불가). ref==def 링크 테스트.
 - **R3 (HIGH)**: HWP 바이너리 머리말/꼬리말 읽기 — 현재 header=None(convert.rs:257). IR/HWPX/MD 측 기존.
 - **R4 (BLOCKER 종결)**: 관(款) 감지 — 款 포함 fixture 1개 확보 → 편/장/절/관/조 5단계 재매핑 + golden 갱신. **fixture 확보 불가 시 PLAN에서 영구 제거**(조건부 이월 금지).
 - **R5**: 사람 검증 골든 1건 — moel 1개를 사람이 검수한 정답 MD와 비교, 자기참조 골든 고리 차단(`20026년`·헤딩 누락 등 실버그 포획).

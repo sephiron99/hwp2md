@@ -282,6 +282,68 @@ fn hwp_to_ir_two_footnotes_get_sequential_ids() {
 }
 
 #[test]
+fn hwp_to_ir_footnote_emits_inline_ref_matching_definition() {
+    // R2: a paragraph carrying a footnote control must emit a `footnote_ref`
+    // inline (linking the call-out) whose id matches the Footnote definition
+    // block. Previously the definition floated with no in-body reference.
+    let mut hwp = make_hwp_document();
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![HwpParagraph {
+            text: "본문 문장".into(),
+            char_shape_ids: Vec::new(),
+            para_shape_id: 0,
+            style_id: 0,
+            controls: vec![HwpControl::FootnoteEndnote {
+                is_endnote: false,
+                paragraphs: vec![HwpParagraph {
+                    text: "각주 내용".into(),
+                    char_shape_ids: Vec::new(),
+                    para_shape_id: 0,
+                    style_id: 0,
+                    controls: Vec::new(),
+                    raw_para_text: None,
+                }],
+            }],
+            raw_para_text: None,
+        }],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+    let blocks = &doc.sections[0].blocks;
+
+    let ref_id = blocks
+        .iter()
+        .find_map(|b| match b {
+            ir::Block::Paragraph { inlines } => {
+                inlines.iter().find_map(|i| i.footnote_ref.clone())
+            }
+            _ => None,
+        })
+        .expect("a footnote_ref inline in the body paragraph");
+
+    let def_id = blocks
+        .iter()
+        .find_map(|b| match b {
+            ir::Block::Footnote { id, .. } => Some(id.clone()),
+            _ => None,
+        })
+        .expect("a Footnote definition block");
+
+    assert_eq!(ref_id, def_id, "footnote ref id must match definition id");
+    assert_eq!(ref_id, "footnote-1");
+
+    let md = crate::md::write_markdown(&doc, false);
+    assert!(
+        md.contains("[^footnote-1]"),
+        "body must reference the footnote; got: {md}"
+    );
+    assert!(
+        md.contains("[^footnote-1]:"),
+        "definition must be present; got: {md}"
+    );
+}
+
+#[test]
 fn hwp_to_ir_two_endnotes_get_sequential_ids() {
     let make_en_ctrl = || HwpControl::FootnoteEndnote {
         is_endnote: true,

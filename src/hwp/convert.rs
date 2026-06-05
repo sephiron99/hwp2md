@@ -303,77 +303,79 @@ fn paragraph_to_staged_counted(
     endnote_counter: &mut u32,
     out: &mut Vec<StagedBlock>,
 ) {
+    // Footnote/endnote controls are handled specially: a `footnote_ref` inline
+    // is appended to the paragraph body (so the call-out links to the note) and
+    // the definition block is emitted *after* the body. All other controls
+    // (tables, images, …) are emitted as standalone blocks before the body.
+    //
+    // Note: the exact in-text position of the call-out is not recoverable —
+    // `extract_paragraph_text` drops inline control chars — so the ref is
+    // appended at the end of the paragraph (best-effort, still a valid link).
+    let mut footnote_refs: Vec<ir::Inline> = Vec::new();
+    let mut footnote_defs: Vec<StagedBlock> = Vec::new();
     for ctrl in &para.controls {
-        if let Some(block) =
-            control_to_block_counted(ctrl, doc_info, footnote_counter, endnote_counter)
+        if let HwpControl::FootnoteEndnote {
+            is_endnote,
+            paragraphs,
+        } = ctrl
         {
+            let id = if *is_endnote {
+                *endnote_counter += 1;
+                format!("endnote-{endnote_counter}")
+            } else {
+                *footnote_counter += 1;
+                format!("footnote-{footnote_counter}")
+            };
+            footnote_refs.push(ir::Inline::footnote_ref(id.clone()));
+            let content: Vec<ir::Block> = paragraphs
+                .iter()
+                .flat_map(|p| paragraph_to_blocks(p, doc_info))
+                .collect();
+            footnote_defs.push(StagedBlock::Plain(ir::Block::Footnote { id, content }));
+        } else if let Some(block) = control_to_block(ctrl, doc_info) {
             out.push(StagedBlock::Plain(block));
         }
     }
 
     let text = para.text.trim();
-    if text.is_empty() {
+    let mut inlines = if text.is_empty() {
+        Vec::new()
+    } else {
+        build_inlines(para, doc_info)
+    };
+
+    if inlines.is_empty() && footnote_refs.is_empty() {
+        // No body content; still emit any footnote definitions.
+        out.append(&mut footnote_defs);
         return;
     }
 
-    let heading_level = detect_heading_level(para, doc_info);
-    let inlines = build_inlines(para, doc_info);
-    if inlines.is_empty() {
-        return;
-    }
+    // Heading/list classification only applies to paragraphs with real text;
+    // a footnote-only paragraph is emitted as a plain paragraph carrying the ref.
+    let has_text = !inlines.is_empty();
+    inlines.append(&mut footnote_refs);
 
-    // Headings are never list items.
-    if let Some(level) = heading_level {
-        out.push(StagedBlock::Plain(ir::Block::Heading { level, inlines }));
-        return;
-    }
-
-    match detect_list_kind(para, doc_info) {
-        Some(ListKind::Ordered) => {
-            out.push(StagedBlock::ListPara {
+    if has_text {
+        if let Some(level) = detect_heading_level(para, doc_info) {
+            out.push(StagedBlock::Plain(ir::Block::Heading { level, inlines }));
+            out.append(&mut footnote_defs);
+            return;
+        }
+        match detect_list_kind(para, doc_info) {
+            Some(ListKind::Ordered) => out.push(StagedBlock::ListPara {
                 ordered: true,
                 block: ir::Block::Paragraph { inlines },
-            });
-        }
-        Some(ListKind::Unordered) => {
-            out.push(StagedBlock::ListPara {
+            }),
+            Some(ListKind::Unordered) => out.push(StagedBlock::ListPara {
                 ordered: false,
                 block: ir::Block::Paragraph { inlines },
-            });
+            }),
+            None => out.push(StagedBlock::Plain(ir::Block::Paragraph { inlines })),
         }
-        None => {
-            out.push(StagedBlock::Plain(ir::Block::Paragraph { inlines }));
-        }
+    } else {
+        out.push(StagedBlock::Plain(ir::Block::Paragraph { inlines }));
     }
-}
-
-/// Counter-aware variant of `control_to_block` that assigns sequential IDs
-/// to footnotes (`footnote-1`, `footnote-2`, …) and endnotes (`endnote-1`, …).
-fn control_to_block_counted(
-    ctrl: &HwpControl,
-    doc_info: &DocInfo,
-    footnote_counter: &mut u32,
-    endnote_counter: &mut u32,
-) -> Option<ir::Block> {
-    if let HwpControl::FootnoteEndnote {
-        is_endnote,
-        paragraphs,
-    } = ctrl
-    {
-        let content: Vec<ir::Block> = paragraphs
-            .iter()
-            .flat_map(|p| paragraph_to_blocks(p, doc_info))
-            .collect();
-        let id = if *is_endnote {
-            *endnote_counter += 1;
-            format!("endnote-{endnote_counter}")
-        } else {
-            *footnote_counter += 1;
-            format!("footnote-{footnote_counter}")
-        };
-        return Some(ir::Block::Footnote { id, content });
-    }
-    control_to_block(ctrl, doc_info)
+    out.append(&mut footnote_defs);
 }
 
 pub(crate) fn paragraph_to_blocks(para: &HwpParagraph, doc_info: &DocInfo) -> Vec<ir::Block> {

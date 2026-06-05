@@ -1,6 +1,6 @@
 # hwp2md — Progress
 
-## 현재 상태: v0.5.0 Sprint 97 완료 (table/code split + any_block_in_doc + H1/H2/H3 heading roundtrip)
+## 현재 상태: v0.5.0 Sprint 98 완료 (이미지 링크 깨짐 CRITICAL 수정 — 5인 전문가 리뷰 후속)
 
 ### 완료
 
@@ -709,6 +709,34 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - S1: `String::with_capacity` 사전 할당 가능 — 벤치마크 압박 없어 불필요
 - S2: `#[inline]` on collect_inline_text — 컴파일러 자동 처리
 리뷰 전문: `~/.claude/references/2026-05-26_sprint71_flush_rs_docstring_collect_inline_text_review.md`
+
+## Sprint 98 — 2026-06-05
+**주제**: 이미지 링크 깨짐 수정 (CRITICAL) — 5인 전문가 리뷰 후속, production 동작 변경
+
+### 배경
+5인 전문가 병렬 리뷰(Rust/보안/포맷/완성도)에서 CRITICAL 1건 확정:
+HWP 임베디드 이미지의 Markdown 링크가 항상 `image_{id}.bin`을 가리키지만, 추출된 자산 파일은 MIME 기반 `image_{id}.png/jpg`로 저장 → **모든 이미지 링크 깨짐**. S90~S97 8스프린트 연속 production 변경 0건(파일분할/테스트박제)을 깨는 첫 실기능 수정.
+
+### 변경사항
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/hwp/convert.rs` | image arm → `.bin` placeholder, `hwp_to_ir`에 bin_data 기반 src 해결 후처리 패스(중첩 표/리스트/인용/각주 재귀) 추가. 공유 헬퍼 `image_placeholder_src`/`bin_asset_name`로 자산명·링크 단일 출처화 (구조적 재발 방지) |
+| `src/hwp/convert_tests_ir.rs` | 회귀 테스트 2건: 최상위 이미지 src==자산명(`.png`), 표 셀 중첩 이미지 해결(`.jpg`) |
+| `src/hwp/convert_tests_control.rs` | 저수준 이미지 테스트 주석 정직화 (버그를 "한계"로 박제하던 주석 → "placeholder, hwp_to_ir에서 해결") |
+
+### 검증
+- **1284 lib tests + 전체 워크스페이스 0 failures** (신규 2건 RED→GREEN 확인)
+- Clippy `--workspace --all-targets -D warnings`: clean
+- Demo Gate: 회귀 테스트가 버그를 먼저 재현(`image_5.bin`≠`image_5.png`) 후 수정으로 GREEN
+
+### 제약 / 후속
+- 이미지 포함 바이너리 fixture **부재**(5개 moel fixture 전부 텍스트 법령) → 회귀 테스트는 합성 `HwpDocument` 변환 로직 레벨로 작성. 실 e2e 커버리지는 이미지 포함 실 HWP 확보 시 추가 가능.
+- 자기참조 골든 고리: 이번 테스트는 "출력==이전출력"이 아닌 **불변식(src==자산명)** 검증이라 자기참조 아님. 사람 검증 골든 1건 추가(국힘 등 실버그 포획)는 별도 후속.
+
+### 관련 리뷰
+- `~/.claude/references/2026-06-05_hwp2md_5expert_completeness_review.md`
+
+---
 
 ## Sprint 97 — 2026-05-31
 **주제**: table/code split + any_block_in_doc helper + H1/H2/H3 heading roundtrip

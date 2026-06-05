@@ -262,13 +262,29 @@ pub(crate) fn hwp_to_ir(hwp: &HwpDocument) -> ir::Document {
     }
 
     for (id, data) in &hwp.bin_data {
-        let mime = guess_mime(data);
-        let ext = mime_to_ext(&mime);
         doc.assets.push(ir::Asset {
-            name: format!("image_{id}.{ext}"),
+            name: bin_asset_name(*id, data),
             data: data.clone(),
-            mime_type: mime,
+            mime_type: guess_mime(data),
         });
+    }
+
+    // Resolve image placeholders (`image_{id}.bin`) emitted by the
+    // bin_data-unaware `control_to_block` to the canonical asset filenames
+    // (`image_{id}.png`, …) so Markdown links match the extracted files.
+    // Single source of truth: both the asset name above and this rewrite map
+    // derive from `bin_asset_name`, so they cannot diverge.
+    if !hwp.bin_data.is_empty() {
+        let rewrite: std::collections::HashMap<String, String> = hwp
+            .bin_data
+            .iter()
+            .map(|(id, data)| (image_placeholder_src(*id), bin_asset_name(*id, data)))
+            .collect();
+        for section in &mut doc.sections {
+            for block in &mut section.blocks {
+                resolve_image_src(block, &rewrite);
+            }
+        }
     }
 
     doc
@@ -453,13 +469,12 @@ pub(crate) fn control_to_block(ctrl: &HwpControl, doc_info: &DocInfo) -> Option<
                 inner_margin: None,
             })
         }
-        HwpControl::Image { bin_data_id, .. } => {
-            let src = format!("image_{bin_data_id}.bin");
-            Some(ir::Block::Image {
-                src,
-                alt: String::new(),
-            })
-        }
+        HwpControl::Image { bin_data_id, .. } => Some(ir::Block::Image {
+            // bin_data-unaware placeholder; `hwp_to_ir` resolves the real
+            // extension to match the extracted asset filename.
+            src: image_placeholder_src(*bin_data_id),
+            alt: String::new(),
+        }),
         HwpControl::Equation { script } => {
             let tex = eqedit_to_latex(script);
             Some(ir::Block::Math {
@@ -666,6 +681,59 @@ fn mime_to_ext(mime: &str) -> &'static str {
         "image/bmp" => "bmp",
         "image/webp" => "webp",
         _ => "bin",
+    }
+}
+
+/// Placeholder image `src` emitted by `control_to_block` before bin_data is
+/// known. `hwp_to_ir` rewrites it to the real [`bin_asset_name`] once the
+/// extension can be resolved.
+fn image_placeholder_src(bin_data_id: u16) -> String {
+    format!("image_{bin_data_id}.bin")
+}
+
+/// Canonical asset filename for an embedded binary, derived from its sniffed
+/// MIME type. Single source of truth for both the asset entry and the image
+/// link, ensuring the Markdown reference always matches the extracted file.
+fn bin_asset_name(id: u16, data: &[u8]) -> String {
+    format!("image_{id}.{}", mime_to_ext(&guess_mime(data)))
+}
+
+/// Rewrite `Block::Image` srcs using the placeholder→canonical map, recursing
+/// into every block-nesting container (tables, lists, quotes, footnotes).
+fn resolve_image_src(block: &mut ir::Block, rewrite: &std::collections::HashMap<String, String>) {
+    match block {
+        ir::Block::Image { src, .. } => {
+            if let Some(name) = rewrite.get(src) {
+                *src = name.clone();
+            }
+        }
+        ir::Block::Table { rows, .. } => {
+            for row in rows.iter_mut() {
+                for cell in row.cells.iter_mut() {
+                    for b in cell.blocks.iter_mut() {
+                        resolve_image_src(b, rewrite);
+                    }
+                }
+            }
+        }
+        ir::Block::BlockQuote { blocks } => {
+            for b in blocks.iter_mut() {
+                resolve_image_src(b, rewrite);
+            }
+        }
+        ir::Block::List { items, .. } => {
+            for item in items.iter_mut() {
+                for b in item.blocks.iter_mut() {
+                    resolve_image_src(b, rewrite);
+                }
+            }
+        }
+        ir::Block::Footnote { content, .. } => {
+            for b in content.iter_mut() {
+                resolve_image_src(b, rewrite);
+            }
+        }
+        _ => {}
     }
 }
 

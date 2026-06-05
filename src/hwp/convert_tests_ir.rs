@@ -102,6 +102,123 @@ fn hwp_to_ir_bin_data_becomes_asset() {
 }
 
 #[test]
+fn hwp_to_ir_image_src_matches_asset_filename() {
+    // Regression (2026-06-05): an embedded PNG must produce an Image block whose
+    // `src` carries the real extension (`.png`) and exactly matches the extracted
+    // asset filename — not the bin-unaware `.bin` placeholder. Previously the
+    // Markdown linked `image_5.bin` while the asset was saved as `image_5.png`,
+    // so every extracted image was a broken link.
+    let mut hwp = make_hwp_document();
+    let png = vec![0x89u8, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    hwp.bin_data.insert(5, png);
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![HwpParagraph {
+            text: String::new(),
+            char_shape_ids: Vec::new(),
+            para_shape_id: 0,
+            style_id: 0,
+            controls: vec![HwpControl::Image {
+                bin_data_id: 5,
+                width: 10,
+                height: 10,
+            }],
+            raw_para_text: None,
+        }],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+
+    let asset_name = doc.assets[0].name.clone();
+    assert_eq!(asset_name, "image_5.png", "asset filename");
+
+    let img_src = doc
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(|b| match b {
+            ir::Block::Image { src, .. } => Some(src.clone()),
+            _ => None,
+        })
+        .expect("an Image block");
+    assert_eq!(
+        img_src, "image_5.png",
+        "image src must carry the real extension"
+    );
+    assert_eq!(
+        img_src, asset_name,
+        "image src must match the extracted asset filename"
+    );
+}
+
+#[test]
+fn hwp_to_ir_image_in_table_cell_src_resolved() {
+    // The src-resolution pass must reach images nested inside table cells,
+    // not just top-level paragraphs.
+    use crate::hwp::model::HwpTableCell;
+    let mut hwp = make_hwp_document();
+    let jpg = vec![0xFFu8, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+    hwp.bin_data.insert(2, jpg);
+    let cell = HwpTableCell {
+        row: 0,
+        col: 0,
+        row_span: 1,
+        col_span: 1,
+        vertical_align: 0,
+        is_header: false,
+        paragraphs: vec![HwpParagraph {
+            text: String::new(),
+            char_shape_ids: Vec::new(),
+            para_shape_id: 0,
+            style_id: 0,
+            controls: vec![HwpControl::Image {
+                bin_data_id: 2,
+                width: 5,
+                height: 5,
+            }],
+            raw_para_text: None,
+        }],
+    };
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![HwpParagraph {
+            text: String::new(),
+            char_shape_ids: Vec::new(),
+            para_shape_id: 0,
+            style_id: 0,
+            controls: vec![HwpControl::Table {
+                row_count: 1,
+                col_count: 1,
+                cells: vec![cell],
+            }],
+            raw_para_text: None,
+        }],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+
+    fn find_img(b: &ir::Block) -> Option<String> {
+        match b {
+            ir::Block::Image { src, .. } => Some(src.clone()),
+            ir::Block::Table { rows, .. } => rows
+                .iter()
+                .flat_map(|r| &r.cells)
+                .flat_map(|c| &c.blocks)
+                .find_map(find_img),
+            _ => None,
+        }
+    }
+    let src = doc
+        .sections
+        .iter()
+        .flat_map(|s| &s.blocks)
+        .find_map(find_img)
+        .expect("nested Image block");
+    assert_eq!(
+        src, "image_2.jpg",
+        "nested image src must resolve to the jpg asset filename"
+    );
+}
+
+#[test]
 fn hwp_to_ir_empty_paragraph_text_not_emitted() {
     let mut hwp = make_hwp_document();
     hwp.sections.push(HwpSection {

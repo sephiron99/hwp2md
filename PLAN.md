@@ -273,14 +273,22 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 - **P3**: `any_block_in_doc` → fixtures/mod.rs — ✅ lossy-contract tests 리팩 (-12 lines)
 - **P4**: 헤딩 roundtrip — ✅ H1/H2/H3 hp:styleIDRef numeric → parse_hwpx_style_ref lossless
 
-## Sprint 98 로드맵
+## Sprint 98 완료 (2026-06-05) ✅
 
-Sprint 97 완료 (2026-05-31). 1544 tests. table/code split + heading roundtrip. integration.rs 2430 lines.
+5인 전문가 병렬 리뷰(Rust 88 / 보안 92 / 포맷 68 / 완성도 62) 후속. CRITICAL 1건 수정으로 S90~S97 8스프린트 연속 production 0건 패딩 종료.
 
-- **P1**: 관(subsection) 감지 — BLOCKER 계속 유지
-- **P2**: integration.rs 추가 분할 — multi-section/roundtrip 섹션 분리 (Sprint 88 P4 + 89 P4)
-- **P3**: 인라인 서식 추가 roundtrip — underline MD→HWPX→MD + superscript/subscript roundtrip
-- **P4**: Heading H4-H6 roundtrip + 레벨 clamp 확인 (writer clamps to 1-6; H7→H6)
+- **P1 (CRITICAL)**: ✅ 이미지 링크 깨짐 수정 — `image_{id}.bin` placeholder → `hwp_to_ir` bin_data 기반 해결(중첩 재귀) + 자산명 단일 출처화. 회귀 테스트 2건(RED→GREEN). 1284 lib tests, clippy clean.
+- 이전 로드맵 P2(integration.rs 추가 분할) **폐기** — 파일분할 패딩(`agents.md` Sprint Completion Gate: 동일유형 3회 연속 금지). 측정된 트리거 없이 분할 금지.
+
+## 다음 로드맵 (전문가 리뷰 확정 — 실기능, 패딩 금지)
+
+> 전부 expert-confirmed 실사용 충실도 결함. 착수는 사용자 승인 후.
+
+- **R1 (HIGH)**: HWP BinData 압축 해제 (reader.rs:477) — 압축 저장 임베디드 이미지 추출. 이미지 fixture 확보 전제.
+- **R2 (HIGH)**: 각주 참조 마커 본문 삽입 — HWP 본문 각주 위치에 `[^n]` inline(IR/MD 인프라 기존). convert.rs:470.
+- **R3 (HIGH)**: HWP 바이너리 머리말/꼬리말 읽기 — 현재 header=None(convert.rs:257). IR/HWPX/MD 측 기존.
+- **R4 (BLOCKER 종결)**: 관(款) 감지 — 款 포함 fixture 1개 확보 → 편/장/절/관/조 5단계 재매핑 + golden 갱신. **fixture 확보 불가 시 PLAN에서 영구 제거**(조건부 이월 금지).
+- **R5**: 사람 검증 골든 1건 — moel 1개를 사람이 검수한 정답 MD와 비교, 자기참조 골든 고리 차단(`20026년`·헤딩 누락 등 실버그 포획).
 
 ## 라이선스
 

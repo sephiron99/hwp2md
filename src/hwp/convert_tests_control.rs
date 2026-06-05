@@ -7,6 +7,10 @@ use crate::hwp::model::{DocInfo, HwpControl, HwpParagraph, HwpTableCell};
 
 #[test]
 fn control_to_block_image_produces_image_block() {
+    // `control_to_block` is bin_data-unaware, so it emits the `.bin` placeholder
+    // src. The real extension is resolved later in `hwp_to_ir` (see
+    // `hwp_to_ir_image_src_matches_asset_filename`); here we only pin the
+    // placeholder shape produced at this layer.
     let ctrl = HwpControl::Image {
         bin_data_id: 7,
         width: 100,
@@ -16,15 +20,15 @@ fn control_to_block_image_produces_image_block() {
     let block = control_to_block(&ctrl, &doc_info).expect("Some");
     assert!(
         matches!(block, ir::Block::Image { ref src, .. } if src == "image_7.bin"),
-        "expected Image block with src=image_7.bin, got {block:?}"
+        "expected Image block with placeholder src=image_7.bin, got {block:?}"
     );
 }
 
 #[test]
 fn control_to_block_image_bin_data_id_zero_produces_image_0_bin() {
     // bin_data_id=0 means find_gsotype_bin_id returned 0 (no picture found).
-    // The IR still produces an Image block with src="image_0.bin".
-    // This is a known limitation: the link will be broken, but the block exists.
+    // The IR still produces an Image block with the placeholder src="image_0.bin".
+    // With no matching bin_data entry, `hwp_to_ir` leaves the placeholder as-is.
     // Regression pin — do not silently drop images with id=0.
     let ctrl = HwpControl::Image {
         bin_data_id: 0,
@@ -35,7 +39,7 @@ fn control_to_block_image_bin_data_id_zero_produces_image_0_bin() {
     let block = control_to_block(&ctrl, &doc_info).expect("Image control must produce a block");
     assert!(
         matches!(block, ir::Block::Image { ref src, .. } if src == "image_0.bin"),
-        "expected Image block with src=image_0.bin for id=0; got {block:?}"
+        "expected Image block with placeholder src=image_0.bin for id=0; got {block:?}"
     );
 }
 

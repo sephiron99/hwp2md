@@ -288,7 +288,12 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 - **R2 (HIGH)**: ✅ (S99) 각주 참조 마커 본문 삽입 — 문단 끝 best-effort `footnote_ref`(위치는 extract가 control char 제거로 복원 불가). ref==def 링크 테스트.
 - **R3 (HIGH)**: ✅ (S99) HWP 머리말/꼬리말 읽기 — HeaderFooter variant + head/foot ctrl_id + section hoist. 실 fixture 미검증(스펙 기준), 파싱/hoist 검증.
 - **R4 (BLOCKER 종결)**: ✅ (S99) 관(款) 감지 — additive H2 collapse(편/장/절/조 불변→golden 무영향). ~20스프린트 BLOCKER 해소. distinct 5단계는 사람golden 재baseline 필요라 보류.
-- **R5**: 사람 검증 골든 1건 — moel 1개를 사람이 검수한 정답 MD와 비교, 자기참조 골든 고리 차단(`20026년`·헤딩 누락 등 실버그 포획).
+- **R5**: ✅ (S99) 사람 검증 골든 *준비* — 비자기참조 스캐폴드(`tests/real_human_golden.rs` #[ignore]) + 확인된 실불일치 체크리스트(`HUMAN_VERIFY.md`: 조헤딩 비일관/이중번호119줄/헤딩본문포함). **사람 검증 단계는 사용자 위임**(한컴 렌더 대조 불가).
+
+## 차기 후보 (R5 분석에서 도출, 각 별도 vertical slice — 사용자 승인 후)
+- **F-D1/D2**: 제N조 헤딩 head/body 분리 (헤딩 ceiling 로직 재설계) — 36 헤딩화 vs 23 본문화 비일관 해소
+- **F-D3**: 목록 이중번호 `1.   1.` (119줄) — 원문 번호 보존 정책
+- **F-D4**: 헤딩 마커 뒤 과다 공백 정규화
 
 ## 라이선스
 

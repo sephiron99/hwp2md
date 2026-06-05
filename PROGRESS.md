@@ -738,6 +738,26 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - 의사결정: distinct 5단계 매핑은 사람검증 golden 재baseline + 관 fixture 필요(R5 영역)라 보류. 핵심 사용자 문제(관 미감지)는 additive로 해소 → BLOCKER 종결. **PLAN 영구제거 불필요**(fixture 없이 해결).
 - 테스트: 관 감지 3케이스 + 단어오탐 2케이스. lib 1295 tests, clippy clean.
 
+### R5 — 사람 검증 골든 준비 ✅ (사람 검증 단계는 위임)
+- 한계: hwp2md가 한컴오피스로 원본을 렌더·대조할 수 없어 **자율 완료 불가**. 자기참조 골든을 끊으려면 사람이 검증한 정답 골든 필요.
+- 산출물:
+  - `tests/real_human_golden.rs` — `#[ignore]` 비자기참조 스캐폴드. `moel_02.human-verified.md`(사람 작성) 존재 시 현재 출력과 비교, 부재 시 graceful skip.
+  - `tests/fixtures/real/HUMAN_VERIFY.md` — 절차 + **자동 분석으로 확인된 실 불일치** 목록.
+- 확인된 실 불일치(전문가 지적의 현재 코드 실재 검증, python 정밀분석):
+  - D1: 제N조 헤딩 비일관 — 36개 헤딩화 vs **23개 본문화**(100자 ceiling 기준 임의 분기, 제1·5·6·9·10조 등 본문화)
+  - D2: 헤딩에 본문 문장 전체 포함 (`## 제2조(정의) 이 고시에서…`)
+  - D3: 목록 이중번호 `1.   1.` **119줄**
+  - D4: 헤딩 마커 뒤 과다 공백 (`#    제1장`)
+  - 비재현: `20026년` moel_02에서 0건 / 헤딩 앞공백4+ 0건 (정직 보고)
+- 다음 후보(R5 범위 밖, 각 별도 슬라이스): F-D1/D2 조 헤딩 head/body 분리, F-D3 이중번호 정책, F-D4 마커 공백 정규화.
+- 검증: 스캐폴드 default=ignored / --ignored=skip, clippy clean.
+
+---
+
+## Sprint 99 R1~R5 종합
+
+R1~R5 = 1차 전문가 리뷰 후속 실기능. lib 1284→1295(+11 테스트, +스캐폴드 1). 커밋 6개(이미지CRITICAL S98 + R1~R5). S90~S97 8스프린트 패딩 종료, 20스프린트 관 BLOCKER 종결.
+
 ---
 
 ## Sprint 98 — 2026-06-05

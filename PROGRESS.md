@@ -710,6 +710,17 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - S2: `#[inline]` on collect_inline_text — 컴파일러 자동 처리
 리뷰 전문: `~/.claude/references/2026-05-26_sprint71_flush_rs_docstring_collect_inline_text_review.md`
 
+## Sprint 99 — 2026-06-05 (전문가 리뷰 R1~R5 실기능)
+**주제**: 전문가 확정 충실도 결함 R1~R5 연속 수정 (BinData 압축해제 / 각주참조 / 머리말꼬리말 / 관 / 사람골든)
+
+### R1 — HWP BinData 압축 해제 ✅
+- 문제: `read_bin_data`(reader.rs:477)가 BIN 스트림을 raw로 읽어 압축 저장 임베디드 이미지가 깨진 바이트로 추출됨.
+- 수정: `maybe_decompress_bin(raw, type_word, doc_compressed)` 헬퍼 — BIN_DATA `type` 워드 bit 4-5(0=문서기본/1=항상/2=비압축) × 문서 compressed 플래그로 deflate 해제 결정. 해제 실패 시 raw 폴백(단일 손상 엔트리가 문서 전체를 깨지 않음). `read_bin_data`에 `header.compressed` 배선.
+- 테스트: 결정 매트릭스 5건(정책 0/1/2 × 플래그 + 실패 폴백). decompress_stream 256MB bomb 가드 경유(보안 LOW도 커버).
+- 검증: lib 1289 tests, clippy clean.
+
+---
+
 ## Sprint 98 — 2026-06-05
 **주제**: 이미지 링크 깨짐 수정 (CRITICAL) — 5인 전문가 리뷰 후속, production 동작 변경
 

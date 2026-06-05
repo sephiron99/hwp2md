@@ -107,7 +107,7 @@ fn parse_hwp_file(path: &Path) -> Result<HwpDocument, Hwp2MdError> {
         }
     }
 
-    let bin_data = read_bin_data(&mut cfb, &doc_info)?;
+    let bin_data = read_bin_data(&mut cfb, &doc_info, header.compressed)?;
     let (summary_title, summary_author, summary_subject, summary_keywords) =
         read_summary_info(&mut cfb);
 
@@ -233,6 +233,30 @@ fn read_stream_bytes(
         decompress_stream(&raw)
     } else {
         Ok(raw)
+    }
+}
+
+/// Decompress a BinData stream payload according to the document compression
+/// flag and the entry's compress-policy bits (BIN_DATA `type` word bits 4-5:
+/// 0 = follow document flag, 1 = always compressed, 2 = never compressed).
+///
+/// On decompression failure the raw bytes are returned — a single corrupt
+/// embedded image must not fail the whole document.
+fn maybe_decompress_bin(raw: Vec<u8>, type_word: u16, doc_compressed: bool) -> Vec<u8> {
+    let should = match (type_word >> 4) & 0x03 {
+        1 => true,
+        2 => false,
+        _ => doc_compressed,
+    };
+    if !should {
+        return raw;
+    }
+    match decompress_stream(&raw) {
+        Ok(decompressed) => decompressed,
+        Err(e) => {
+            tracing::warn!("BinData decompress failed ({e}); using raw bytes");
+            raw
+        }
     }
 }
 
@@ -477,17 +501,19 @@ pub(crate) fn parse_char_shape_refs(data: &[u8]) -> Vec<(u32, u16)> {
 fn read_bin_data(
     cfb: &mut cfb::CompoundFile<std::fs::File>,
     doc_info: &DocInfo,
+    compressed: bool,
 ) -> Result<HashMap<u16, Vec<u8>>, Hwp2MdError> {
     let mut bin_data = HashMap::new();
 
     if doc_info.bin_data_entries.is_empty() {
-        // Fallback: sequential probe with a conservative upper limit.
+        // Fallback: sequential probe with a conservative upper limit. No entry
+        // metadata, so assume embedding (policy "follow document flag").
         for i in 1..=100u16 {
             let path = format!("BinData/BIN{i:04X}");
             if let Ok(stream) = cfb.open_stream(&path) {
                 let mut data = Vec::new();
                 stream.take(MAX_CFB_STREAM).read_to_end(&mut data)?;
-                bin_data.insert(i, data);
+                bin_data.insert(i, maybe_decompress_bin(data, 0x0001, compressed));
             } else {
                 if i > 10 && bin_data.is_empty() {
                     break;
@@ -515,7 +541,7 @@ fn read_bin_data(
             if let Ok(stream) = cfb.open_stream(&path) {
                 let mut data = Vec::new();
                 stream.take(MAX_CFB_STREAM).read_to_end(&mut data)?;
-                bin_data.insert(id, data);
+                bin_data.insert(id, maybe_decompress_bin(data, entry.r#type, compressed));
             }
         }
     }

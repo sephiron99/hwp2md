@@ -330,6 +330,25 @@ fn detect_korean_regulation_heading_jo_returns_h2() {
 }
 
 #[test]
+fn detect_korean_regulation_heading_gwan_returns_h2() {
+    // R4: 관(款) sits between 절 and 조 in the statute hierarchy
+    // (편>장>절>관>조). Collapsed to H2 like 절/조 — additive: existing
+    // 편/장/절/조 levels are unchanged, so golden files are unaffected.
+    // Previously 관 fell through to body text (the 20-sprint BLOCKER).
+    assert_eq!(detect_korean_regulation_heading("제1관 통칙"), Some(2));
+    assert_eq!(detect_korean_regulation_heading("제2관(총칙)"), Some(2));
+    assert_eq!(detect_korean_regulation_heading("제3관"), Some(2));
+}
+
+#[test]
+fn detect_korean_regulation_heading_gwan_word_not_heading() {
+    // "관" inside a common word must NOT be promoted — the char after 관 is not
+    // a heading terminator. Guards against 관리/관련/관계 false positives.
+    assert_eq!(detect_korean_regulation_heading("제1관리대장"), None);
+    assert_eq!(detect_korean_regulation_heading("제2관련 규정"), None);
+}
+
+#[test]
 fn detect_korean_regulation_heading_no_digits_returns_none() {
     assert_eq!(detect_korean_regulation_heading("제장"), None);
 }

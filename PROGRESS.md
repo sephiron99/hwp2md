@@ -732,6 +732,12 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - 테스트: dispatcher 2(head/foot record→variant) + convert 1(hoist + 본문 비누출). lib 1293 tests, clippy clean.
 - ⚠️ **실 fixture 미검증**: 머리말 포함 .hwp fixture 부재로 ctrl_id 매직바이트(head/foot)는 HWP 5.0 스펙 표30 기준. 파싱 파이프라인·hoist 로직은 검증됨. 실 문서 e2e는 머리말 포함 HWP 확보 시 추가.
 
+### R4 — 관(款) 감지 BLOCKER 종결 ✅ (S79~S98 ~20스프린트 이월 해소)
+- 문제: `detect_korean_regulation_heading`(heading_style.rs)이 편/장/절/조만 처리, **관(款) 미감지** → "제1관 통칙"이 헤딩 아닌 본문으로 출력(TOC 누락). 약 20스프린트 동안 P1 BLOCKER로 이월만 됨.
+- 해법 (additive, golden 무영향): 관을 strip 체인에 추가 → 편>장>절>관>조 계층에서 절/조와 함께 **H2 collapse**. **편/장/절/조 레벨 불변** → MOEL golden 5개 무영향(real_fixtures_hwp 11 passed로 확인). false-positive 가드(관리/관련/관계는 terminator 아님 → None).
+- 의사결정: distinct 5단계 매핑은 사람검증 golden 재baseline + 관 fixture 필요(R5 영역)라 보류. 핵심 사용자 문제(관 미감지)는 additive로 해소 → BLOCKER 종결. **PLAN 영구제거 불필요**(fixture 없이 해결).
+- 테스트: 관 감지 3케이스 + 단어오탐 2케이스. lib 1295 tests, clippy clean.
+
 ---
 
 ## Sprint 98 — 2026-06-05

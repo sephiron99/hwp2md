@@ -8,6 +8,12 @@
 /// - 제N장 (chapter) → H1
 /// - 제N절 (section) → H2 — 절 and 조 share H2 so documents without 절 do
 ///   not produce an orphan H1→H3 heading gap.
+/// - 제N관 (sub-section, 款) → H2 — 관 sits between 절 and 조 in the statute
+///   hierarchy (편>장>절>관>조); collapsed to H2 alongside 절/조. This is
+///   *additive*: it only adds detection (previously 관 fell through to body
+///   text) without changing 편/장/절/조 levels, so existing golden files are
+///   unaffected. A distinct 5-level mapping would require re-baselining
+///   human-verified golden files and a 관-bearing fixture.
 /// - 제N조 (article) → H2
 ///
 /// 100-char ceiling: Korean regulation HWPs sometimes pack the article marker
@@ -43,12 +49,14 @@ pub(crate) fn detect_korean_regulation_heading(text: &str) -> Option<u8> {
         (1u8, r)
     } else if let Some(r) = suffix.strip_prefix('절') {
         (2u8, r)
+    } else if let Some(r) = suffix.strip_prefix('관') {
+        (2u8, r)
     } else if let Some(r) = suffix.strip_prefix('조') {
         (2u8, r)
     } else {
         return None;
     };
-    // The character after 편/장/절/조 must be a heading terminator or end-of-string.
+    // The character after 편/장/절/관/조 must be a heading terminator or end-of-string.
     // Exception: "의" followed by digits is amendment sub-article notation (제N조의M).
     match after_suffix.chars().next() {
         None => Some(level),

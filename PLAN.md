@@ -292,7 +292,7 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 
 ## 차기 후보 (R5 분석에서 도출, 각 별도 vertical slice — 사용자 승인 후)
 - **F-D1/D2**: 제N조 헤딩 head/body 분리 (헤딩 ceiling 로직 재설계) — 36 헤딩화 vs 23 본문화 비일관 해소
-- **F-D3**: 목록 이중번호 `1.   1.` (119줄) — 원문 번호 보존 정책
+- **F-D3**: ✅ (S100) 목록 이중번호 — `strip_leading_list_marker`(ordered+bullet), 골든 5개 재생성(더블마커 0).
 - **F-D4**: 헤딩 마커 뒤 과다 공백 정규화
 
 ## 라이선스

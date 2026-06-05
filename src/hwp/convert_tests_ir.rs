@@ -344,6 +344,43 @@ fn hwp_to_ir_footnote_emits_inline_ref_matching_definition() {
 }
 
 #[test]
+fn hwp_to_ir_ordered_list_does_not_double_number() {
+    // F-D3: HWP docs embed the literal "1." that the author typed; the list
+    // detector wraps the paragraph as an ordered item and the MD writer adds
+    // its own "1." → "1. \1. ..." (the writer escapes the embedded marker).
+    // The embedded marker must be stripped from the list-item content so the
+    // writer's marker is the only one.
+    let mut hwp = make_hwp_document();
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![make_para("1. 첫 항목", 0), make_para("2. 둘째 항목", 0)],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+
+    // IR: the list-item content must have the ordinal marker stripped.
+    let ir::Block::List { items, .. } = &doc.sections[0].blocks[0] else {
+        panic!("expected a List block, got {:?}", doc.sections[0].blocks);
+    };
+    let item_text = |i: usize| {
+        let ir::Block::Paragraph { inlines } = &items[i].blocks[0] else {
+            panic!("expected Paragraph in list item {i}");
+        };
+        inlines[0].text.clone()
+    };
+    assert_eq!(item_text(0), "첫 항목", "leading '1.' must be stripped");
+    assert_eq!(item_text(1), "둘째 항목", "leading '2.' must be stripped");
+
+    // MD: rendered once, no embedded/escaped second marker.
+    let md = crate::md::write_markdown(&doc, false);
+    assert!(
+        !md.contains(r"\1.") && !md.contains(r"\2."),
+        "no escaped embedded marker; got:\n{md}"
+    );
+    assert!(md.contains("1. 첫 항목"), "got:\n{md}");
+    assert!(md.contains("2. 둘째 항목"), "got:\n{md}");
+}
+
+#[test]
 fn hwp_to_ir_header_footer_controls_hoisted_to_section() {
     // R3: HWP binary header/footer controls must populate Section.header/footer
     // (previously the HWP path set them to None via ..Default).
@@ -534,3 +571,4 @@ fn hwp_to_ir_heading_para_shape_becomes_heading_block() {
         );
     }
 }
+

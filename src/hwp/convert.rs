@@ -125,6 +125,75 @@ fn is_ordered_prefix(text: &str) -> bool {
     false
 }
 
+/// Strip a leading ordinal (`1.`, `12)`, `a.`) or bullet (`●`, `-`, …) marker
+/// from the first inline of a list item, so the Markdown writer's own marker is
+/// not duplicated. HWP documents frequently embed the literal marker the author
+/// typed; without this the writer renders `1. \1. …` (F-D3).
+fn strip_leading_list_marker(inlines: &mut [ir::Inline]) {
+    let Some(first) = inlines.first_mut() else {
+        return;
+    };
+    if let Some(rest) = marker_stripped(&first.text) {
+        first.text = rest;
+    }
+}
+
+/// If `text` begins with an ordinal or bullet marker followed by whitespace
+/// (matching the same forms [`is_ordered_prefix`]/bullet detection accept),
+/// return the text after the marker and its trailing spaces. Otherwise `None`.
+fn marker_stripped(text: &str) -> Option<String> {
+    let s = text.trim_start();
+    let after = strip_ordinal_marker(s).or_else(|| strip_bullet_marker(s))?;
+    Some(after.trim_start().to_string())
+}
+
+/// Strip `<1-3 digits | single ASCII letter><. | )>` when followed by
+/// whitespace or end-of-string. Returns the remainder after the separator.
+fn strip_ordinal_marker(s: &str) -> Option<&str> {
+    let first = s.chars().next()?;
+    let body_end = if first.is_ascii_digit() {
+        let digit_end = s
+            .char_indices()
+            .take_while(|(_, c)| c.is_ascii_digit())
+            .last()
+            .map_or(0, |(i, c)| i + c.len_utf8());
+        if digit_end == 0 || digit_end > 3 {
+            return None;
+        }
+        digit_end
+    } else if first.is_ascii_alphabetic() {
+        1
+    } else {
+        return None;
+    };
+    let rest = &s[body_end..];
+    let sep = rest.chars().next()?;
+    if sep != '.' && sep != ')' {
+        return None;
+    }
+    let after = &rest[1..]; // separator is ASCII (1 byte)
+    match after.chars().next() {
+        Some(' ' | '\t') | None => Some(after),
+        _ => None,
+    }
+}
+
+/// Strip a single bullet character when followed by whitespace or end-of-string.
+fn strip_bullet_marker(s: &str) -> Option<&str> {
+    let first = s.chars().next()?;
+    if !matches!(
+        first,
+        '●' | '■' | '▶' | '▷' | '◆' | '◇' | '•' | '·' | '-' | '*'
+    ) {
+        return None;
+    }
+    let after = &s[first.len_utf8()..];
+    match after.chars().next() {
+        Some(' ' | '\t') | None => Some(after),
+        _ => None,
+    }
+}
+
 /// Detect list kind purely from the leading characters of `text`.
 ///
 /// # Recognised unordered bullet characters
@@ -382,14 +451,15 @@ fn paragraph_to_staged_counted(
             return;
         }
         match detect_list_kind(para, doc_info) {
-            Some(ListKind::Ordered) => out.push(StagedBlock::ListPara {
-                ordered: true,
-                block: ir::Block::Paragraph { inlines },
-            }),
-            Some(ListKind::Unordered) => out.push(StagedBlock::ListPara {
-                ordered: false,
-                block: ir::Block::Paragraph { inlines },
-            }),
+            Some(kind) => {
+                // Strip any ordinal/bullet marker embedded in the text so the
+                // Markdown writer's own marker is not duplicated (F-D3).
+                strip_leading_list_marker(&mut inlines);
+                out.push(StagedBlock::ListPara {
+                    ordered: matches!(kind, ListKind::Ordered),
+                    block: ir::Block::Paragraph { inlines },
+                });
+            }
             None => out.push(StagedBlock::Plain(ir::Block::Paragraph { inlines })),
         }
     } else {

@@ -754,6 +754,17 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 
 ---
 
+## Sprint 100 — 2026-06-05 (R5 분석 후속 실버그 수정)
+**주제**: R5에서 확인된 실 불일치 F-D 시리즈 수정
+
+### F-D3 — 목록 이중번호 제거 ✅
+- 문제: HWP 문서가 저자가 입력한 리터럴 "1."을 담고 있고, list 감지가 ordered 아이템으로 감싸면 MD writer가 자체 "1."을 추가 → `1. \1. …`(writer가 임베디드 마커 escape). moel_02 119줄.
+- 수정: `strip_leading_list_marker` — ordered(`is_ordered_prefix`와 동일 규칙: 숫자1-3/ASCII문자 + `.`/`)` + 공백) + bullet(`●■▶▷◆◇•·-*`) 마커를 list-item 첫 inline에서 제거. ordered/unordered 모두 적용.
+- 골든: 5개 moel 골든 재생성(라이브러리 출력 기준), 잔여 더블마커 0, real_fixtures_hwp 11 passed. diff 167줄 전부 리스트마커 정규화(본문/헤딩/날짜 불변, 사전 검증).
+- 테스트: IR 레벨 스트립 검증(`첫 항목`/`둘째 항목`) + MD 무이스케이프마커. lib 1296 tests, clippy clean.
+
+---
+
 ## Sprint 99 R1~R5 종합
 
 R1~R5 = 1차 전문가 리뷰 후속 실기능. lib 1284→1295(+11 테스트, +스캐폴드 1). 커밋 6개(이미지CRITICAL S98 + R1~R5). S90~S97 8스프린트 패딩 종료, 20스프린트 관 BLOCKER 종결.

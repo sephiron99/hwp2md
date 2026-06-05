@@ -381,6 +381,54 @@ fn hwp_to_ir_ordered_list_does_not_double_number() {
 }
 
 #[test]
+fn hwp_to_ir_article_heading_splits_marker_from_body() {
+    // F-D1/D2: "제2조(정의) 본문" → Heading "제2조(정의)" + Paragraph "본문",
+    // even when the body is long (no ceiling). Fixes both the inconsistency
+    // (some 조 were body) and the heading-includes-body defect.
+    let mut hwp = make_hwp_document();
+    let long_body = "이 고시에서 사용하는 용어의 뜻은 다음과 같다. ".repeat(6); // > 100 chars
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![make_para(&format!("제2조(정의) {long_body}"), 0)],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+    let blocks = &doc.sections[0].blocks;
+
+    let ir::Block::Heading { level, inlines } = &blocks[0] else {
+        panic!("first block must be a Heading, got {:?}", blocks[0]);
+    };
+    assert_eq!(*level, 2);
+    let head_text: String = inlines.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(head_text, "제2조(정의)", "heading must be only the marker+title");
+
+    let ir::Block::Paragraph { inlines: body } = &blocks[1] else {
+        panic!("second block must be the body Paragraph, got {:?}", blocks[1]);
+    };
+    let body_text: String = body.iter().map(|i| i.text.as_str()).collect();
+    assert!(
+        body_text.starts_with("이 고시에서"),
+        "body must carry the article text; got {body_text:?}"
+    );
+}
+
+#[test]
+fn hwp_to_ir_chapter_divider_stays_single_heading() {
+    // 장/편/절/관 dividers have no body — they remain a single heading block.
+    let mut hwp = make_hwp_document();
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![make_para("제1장 총칙", 0)],
+    });
+    let doc = hwp_to_ir(&hwp);
+    assert_eq!(doc.sections[0].blocks.len(), 1, "divider = one heading, no body");
+    let ir::Block::Heading { level, inlines } = &doc.sections[0].blocks[0] else {
+        panic!("expected Heading");
+    };
+    assert_eq!(*level, 1);
+    let t: String = inlines.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(t, "제1장 총칙");
+}
+
+#[test]
 fn hwp_to_ir_header_footer_controls_hoisted_to_section() {
     // R3: HWP binary header/footer controls must populate Section.header/footer
     // (previously the HWP path set them to None via ..Default).

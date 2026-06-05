@@ -291,7 +291,7 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 - **R5**: ✅ (S99) 사람 검증 골든 *준비* — 비자기참조 스캐폴드(`tests/real_human_golden.rs` #[ignore]) + 확인된 실불일치 체크리스트(`HUMAN_VERIFY.md`: 조헤딩 비일관/이중번호119줄/헤딩본문포함). **사람 검증 단계는 사용자 위임**(한컴 렌더 대조 불가).
 
 ## 차기 후보 (R5 분석에서 도출, 각 별도 vertical slice — 사용자 승인 후)
-- **F-D1/D2**: 제N조 헤딩 head/body 분리 (헤딩 ceiling 로직 재설계) — 36 헤딩화 vs 23 본문화 비일관 해소
+- **F-D1/D2**: ✅ (S100) 제N조 헤딩 head/body 분리 — `regulation_heading_split`(ceiling 제거) + `split_inlines_at`. 본문화조 23→0, 헤딩=마커+제목만. 골든 5개 재생성.
 - **F-D3**: ✅ (S100) 목록 이중번호 — `strip_leading_list_marker`(ordered+bullet), 골든 5개 재생성(더블마커 0).
 - **F-D4**: 헤딩 마커 뒤 과다 공백 정규화
 

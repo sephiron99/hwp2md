@@ -1,6 +1,7 @@
 use crate::hwp::eqedit::eqedit_to_latex;
 // Re-export so convert_tests_detect can reach it via `use super::*`.
 pub(crate) use crate::hwp::heading_style::detect_korean_regulation_heading;
+use crate::hwp::heading_style::regulation_heading_split;
 use crate::hwp::heading_style::parse_heading_style;
 use crate::hwp::model::{DocInfo, HwpControl, HwpDocument, HwpParagraph, HwpTableCell};
 use crate::ir::{self, InlineFormat};
@@ -191,6 +192,59 @@ fn strip_bullet_marker(s: &str) -> Option<&str> {
     match after.chars().next() {
         Some(' ' | '\t') | None => Some(after),
         _ => None,
+    }
+}
+
+/// Split a run of inlines at a character offset, preserving per-run formatting.
+/// The inline straddling the boundary is cloned and its text divided so neither
+/// side loses bold/italic/colour. Used to separate a regulation heading marker
+/// from its trailing body (F-D1/D2).
+fn split_inlines_at(
+    inlines: Vec<ir::Inline>,
+    char_offset: usize,
+) -> (Vec<ir::Inline>, Vec<ir::Inline>) {
+    let mut head = Vec::new();
+    let mut tail = Vec::new();
+    let mut consumed = 0usize;
+    for inline in inlines {
+        let len = inline.text.chars().count();
+        if consumed >= char_offset {
+            tail.push(inline);
+        } else if consumed + len <= char_offset {
+            consumed += len;
+            head.push(inline);
+        } else {
+            let split_at = char_offset - consumed;
+            let mut h = inline.clone();
+            h.text = inline.text.chars().take(split_at).collect();
+            let mut t = inline;
+            t.text = t.text.chars().skip(split_at).collect();
+            head.push(h);
+            tail.push(t);
+            consumed = char_offset;
+        }
+    }
+    (head, tail)
+}
+
+/// Trim leading/trailing whitespace at the edges of an inline run, dropping any
+/// inline that becomes empty. Keeps interior runs untouched.
+fn trim_edge_whitespace(inlines: &mut Vec<ir::Inline>) {
+    while let Some(first) = inlines.first_mut() {
+        first.text = first.text.trim_start().to_string();
+        if first.text.is_empty() {
+            inlines.remove(0);
+        } else {
+            break;
+        }
+    }
+    while let Some(last) = inlines.last_mut() {
+        last.text = last.text.trim_end().to_string();
+        if last.text.is_empty() {
+            inlines.pop();
+        } else {
+            break;
+        }
     }
 }
 
@@ -445,6 +499,26 @@ fn paragraph_to_staged_counted(
     inlines.append(&mut footnote_refs);
 
     if has_text {
+        // Korean regulation article/divider: split the marker (heading) from any
+        // trailing body so a long article body is not promoted into the heading
+        // and short/long articles behave consistently (F-D1/D2). Checked before
+        // the generic tiers because it carries no length ceiling.
+        if let Some((level, body_offset)) = regulation_heading_split(&para.text) {
+            let (mut head, mut body) = split_inlines_at(inlines, body_offset);
+            trim_edge_whitespace(&mut head);
+            trim_edge_whitespace(&mut body);
+            if !head.is_empty() {
+                out.push(StagedBlock::Plain(ir::Block::Heading {
+                    level,
+                    inlines: head,
+                }));
+            }
+            if !body.is_empty() {
+                out.push(StagedBlock::Plain(ir::Block::Paragraph { inlines: body }));
+            }
+            out.append(&mut footnote_defs);
+            return;
+        }
         if let Some(level) = detect_heading_level(para, doc_info) {
             out.push(StagedBlock::Plain(ir::Block::Heading { level, inlines }));
             out.append(&mut footnote_defs);

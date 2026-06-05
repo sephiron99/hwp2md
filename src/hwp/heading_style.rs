@@ -73,6 +73,106 @@ pub(crate) fn detect_korean_regulation_heading(text: &str) -> Option<u8> {
     }
 }
 
+/// Split a Korean regulation heading paragraph into its heading marker and an
+/// optional trailing body, returning `(level, body_char_offset)` where the
+/// heading is `text[..body_char_offset]` (counted in `char`s) and the body is
+/// the remainder.
+///
+/// Unlike [`detect_korean_regulation_heading`] this has **no length ceiling**:
+/// - 편/장/절/관 dividers map to the whole line (offset = char count, no body);
+/// - 조 articles split after `제N조`(`의M`)?`(제목)`? so a long article body is
+///   not promoted into the heading and short/long articles behave consistently
+///   (F-D1/D2). The character right after the marker must still be a heading
+///   terminator, so word matches like "제1관리…" are rejected.
+pub(crate) fn regulation_heading_split(text: &str) -> Option<(u8, usize)> {
+    let chars: Vec<char> = text.chars().collect();
+    let n = chars.len();
+
+    let mut i = 0;
+    while i < n && chars[i].is_whitespace() {
+        i += 1;
+    }
+    if chars.get(i) != Some(&'제') {
+        return None;
+    }
+    i += 1;
+
+    let digit_start = i;
+    while i < n && chars[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == digit_start {
+        return None;
+    }
+
+    let (level, is_article) = match chars.get(i)? {
+        '편' | '장' => (1u8, false),
+        '절' | '관' => (2u8, false),
+        '조' => (2u8, true),
+        _ => return None,
+    };
+    i += 1; // consume suffix
+
+    // 제N조의M amendment notation (articles only).
+    if is_article && chars.get(i) == Some(&'의') {
+        let mut j = i + 1;
+        let ds = j;
+        while j < n && chars[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > ds {
+            i = j;
+        }
+    }
+
+    // 편/장/절/관: the whole line is the heading title (no body).
+    if !is_article {
+        return match chars.get(i) {
+            None => Some((level, n)),
+            Some(c) if is_heading_terminator(*c) => Some((level, n)),
+            _ => None,
+        };
+    }
+
+    // 조: the character right after the marker must be a heading terminator
+    // (which includes '(' and whitespace); otherwise reject (e.g. "제1조항").
+    match chars.get(i) {
+        None => return Some((level, n)), // bare "제1조" at end-of-line
+        Some(c) if is_heading_terminator(*c) => {}
+        _ => return None,
+    }
+
+    // Optional parenthesised title: the heading extends through the closing paren.
+    let mut k = i;
+    while k < n && matches!(chars[k], ' ' | '\t') {
+        k += 1;
+    }
+    if let Some(&open) = chars.get(k) {
+        if open == '(' || open == '（' {
+            let close = if open == '(' { ')' } else { '）' };
+            let mut depth = 0usize;
+            let mut m = k;
+            while m < n {
+                if chars[m] == open {
+                    depth += 1;
+                } else if chars[m] == close {
+                    depth -= 1;
+                    if depth == 0 {
+                        m += 1;
+                        break;
+                    }
+                }
+                m += 1;
+            }
+            return Some((level, m));
+        }
+    }
+
+    // No parenthesised title: the heading is just the marker; body (if any)
+    // starts right after it.
+    Some((level, i))
+}
+
 /// Returns true if `c` is a valid boundary character immediately after 편/장/절/조.
 ///
 /// `is_whitespace()` follows Rust's Unicode White_Space property: U+0020, U+0009

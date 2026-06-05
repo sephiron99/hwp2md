@@ -757,6 +757,13 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 ## Sprint 100 — 2026-06-05 (R5 분석 후속 실버그 수정)
 **주제**: R5에서 확인된 실 불일치 F-D 시리즈 수정
 
+### F-D1/D2 — 제N조 헤딩 head/body 분리 ✅
+- 문제: 조 문단이 100자 ceiling에 따라 임의 분기 — 36개는 헤딩화(본문 문장까지 헤딩에 포함), 23개는 본문화(헤딩 누락). 같은 계층(조)이 길이로 갈림.
+- 수정: `regulation_heading_split(text)→(level, body_char_offset)` — ceiling 없이 편/장/절/관=전체헤딩, 조=`제N조`(`의M`)?`(제목)`?만 헤딩+나머지 본문. `split_inlines_at`로 경계 inline 텍스트 분리(서식 보존) + `trim_edge_whitespace`. emission에서 조는 Heading+Paragraph 2블록 emit.
+- 결과(moel_02): 헤딩 45→103, **본문화조 23→0**(D1 해소), 헤딩=마커+제목만(D2 해소), `# 제1장`(F-D4 일부도 정규화). 실 본문 누출 0.
+- 골든: 5개 재생성, 본문화조 전부 0, real_fixtures_hwp 11 passed.
+- 테스트: split 함수 6(offset/제목/긴조/의M/bare/오탐) + 통합 2(조분할/divider단일). lib 1304 tests, clippy clean.
+
 ### F-D3 — 목록 이중번호 제거 ✅
 - 문제: HWP 문서가 저자가 입력한 리터럴 "1."을 담고 있고, list 감지가 ordered 아이템으로 감싸면 MD writer가 자체 "1."을 추가 → `1. \1. …`(writer가 임베디드 마커 escape). moel_02 119줄.
 - 수정: `strip_leading_list_marker` — ordered(`is_ordered_prefix`와 동일 규칙: 숫자1-3/ASCII문자 + `.`/`)` + 공백) + bullet(`●■▶▷◆◇•·-*`) 마커를 list-item 첫 inline에서 제거. ordered/unordered 모두 적용.

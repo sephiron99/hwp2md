@@ -341,6 +341,60 @@ fn detect_korean_regulation_heading_gwan_returns_h2() {
 }
 
 #[test]
+fn regulation_heading_split_article_with_title_splits_after_paren() {
+    // F-D1/D2: "제2조(정의) 본문" → heading "제2조(정의)" (7 chars), body " 본문".
+    let text = "제2조(정의) 이 고시에서";
+    let (level, off) = regulation_heading_split(text).expect("Some");
+    assert_eq!(level, 2);
+    let head: String = text.chars().take(off).collect();
+    assert_eq!(head, "제2조(정의)");
+}
+
+#[test]
+fn regulation_heading_split_divider_is_whole_line() {
+    // 장/편/절/관 dividers have no body — offset is the full char count.
+    let text = "제1장 총 칙";
+    let (level, off) = regulation_heading_split(text).expect("Some");
+    assert_eq!(level, 1);
+    assert_eq!(off, text.chars().count());
+}
+
+#[test]
+fn regulation_heading_split_long_article_still_splits() {
+    // No length ceiling: a long article body must still split (fixes D1).
+    let body = "이 고시는 ".repeat(40); // > 100 chars
+    let text = format!("제1조(목적) {body}");
+    let (level, off) = regulation_heading_split(&text).expect("Some");
+    assert_eq!(level, 2);
+    let head: String = text.chars().take(off).collect();
+    assert_eq!(head, "제1조(목적)");
+}
+
+#[test]
+fn regulation_heading_split_amendment_notation() {
+    // 제N조의M(제목) — the marker includes the 의M amendment notation.
+    let text = "제6조의2(특례) 내용";
+    let (_, off) = regulation_heading_split(text).expect("Some");
+    let head: String = text.chars().take(off).collect();
+    assert_eq!(head, "제6조의2(특례)");
+}
+
+#[test]
+fn regulation_heading_split_bare_article_no_body() {
+    let text = "제3조";
+    let (level, off) = regulation_heading_split(text).expect("Some");
+    assert_eq!(level, 2);
+    assert_eq!(off, text.chars().count());
+}
+
+#[test]
+fn regulation_heading_split_word_not_heading() {
+    // Word matches must be rejected (no terminator after 관/조).
+    assert!(regulation_heading_split("제1관리대장").is_none());
+    assert!(regulation_heading_split("제3과 업무").is_none());
+}
+
+#[test]
 fn detect_korean_regulation_heading_gwan_word_not_heading() {
     // "관" inside a common word must NOT be promoted — the char after 관 is not
     // a heading terminator. Guards against 관리/관련/관계 false positives.

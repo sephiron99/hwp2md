@@ -412,6 +412,28 @@ fn hwp_to_ir_article_heading_splits_marker_from_body() {
 }
 
 #[test]
+fn hwp_to_ir_generic_heading_trims_marker_whitespace() {
+    // F-D4: a non-regulation heading (detected via para_shape heading_type)
+    // must not retain HWP indentation whitespace in the rendered marker
+    // (would render as "#   들여쓴 제목").
+    let mut hwp = make_hwp_document();
+    hwp.doc_info.para_shapes = vec![ParaShape {
+        heading_type: Some(0), // → level 1
+        ..Default::default()
+    }];
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![make_para("   들여쓴 제목", 0)],
+    });
+    let doc = hwp_to_ir(&hwp);
+    let ir::Block::Heading { level, inlines } = &doc.sections[0].blocks[0] else {
+        panic!("expected Heading, got {:?}", doc.sections[0].blocks);
+    };
+    assert_eq!(*level, 1);
+    let t: String = inlines.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(t, "들여쓴 제목", "heading marker whitespace must be trimmed");
+}
+
+#[test]
 fn hwp_to_ir_chapter_divider_stays_single_heading() {
     // 장/편/절/관 dividers have no body — they remain a single heading block.
     let mut hwp = make_hwp_document();

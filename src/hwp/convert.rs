@@ -520,6 +520,9 @@ fn paragraph_to_staged_counted(
             return;
         }
         if let Some(level) = detect_heading_level(para, doc_info) {
+            // Trim HWP indentation whitespace so the marker is not rendered as
+            // "#   text" (F-D4).
+            trim_edge_whitespace(&mut inlines);
             out.push(StagedBlock::Plain(ir::Block::Heading { level, inlines }));
             out.append(&mut footnote_defs);
             return;
@@ -557,9 +560,11 @@ pub(crate) fn paragraph_to_blocks(para: &HwpParagraph, doc_info: &DocInfo) -> Ve
     let text = para.text.trim();
     if !text.is_empty() {
         let heading_level = detect_heading_level(para, doc_info);
-        let inlines = build_inlines(para, doc_info);
+        let mut inlines = build_inlines(para, doc_info);
         if !inlines.is_empty() {
             if let Some(level) = heading_level {
+                // Trim HWP indentation whitespace from the marker (F-D4).
+                trim_edge_whitespace(&mut inlines);
                 blocks.push(ir::Block::Heading { level, inlines });
             } else {
                 blocks.push(ir::Block::Paragraph { inlines });

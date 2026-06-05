@@ -764,6 +764,12 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - 골든: 5개 재생성, 본문화조 전부 0, real_fixtures_hwp 11 passed.
 - 테스트: split 함수 6(offset/제목/긴조/의M/bare/오탐) + 통합 2(조분할/divider단일). lib 1304 tests, clippy clean.
 
+### F-D4 — 헤딩 마커 뒤 공백 정규화 ✅
+- 문제: HWP 들여쓰기 공백이 헤딩 inline 선행에 잔존 → `#    제1장`.
+- regulation 헤딩은 F-D1/D2의 `trim_edge_whitespace`로 이미 해소. 잔여: 비-regulation 헤딩(para_shape/style/font 감지)의 generic emission 2곳(staged + paragraph_to_blocks).
+- 수정: generic heading emission 2곳에 `trim_edge_whitespace` 적용 → 모든 헤딩 마커 공백 정규화(방어적, moel 골든 무영향 — 전부 regulation).
+- 테스트: para_shape heading_type + 들여쓴 텍스트 → 트림 검증. lib 1305 tests, clippy clean.
+
 ### F-D3 — 목록 이중번호 제거 ✅
 - 문제: HWP 문서가 저자가 입력한 리터럴 "1."을 담고 있고, list 감지가 ordered 아이템으로 감싸면 MD writer가 자체 "1."을 추가 → `1. \1. …`(writer가 임베디드 마커 escape). moel_02 119줄.
 - 수정: `strip_leading_list_marker` — ordered(`is_ordered_prefix`와 동일 규칙: 숫자1-3/ASCII문자 + `.`/`)` + 공백) + bullet(`●■▶▷◆◇•·-*`) 마커를 list-item 첫 inline에서 제거. ordered/unordered 모두 적용.

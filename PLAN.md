@@ -293,7 +293,7 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 ## 차기 후보 (R5 분석에서 도출, 각 별도 vertical slice — 사용자 승인 후)
 - **F-D1/D2**: ✅ (S100) 제N조 헤딩 head/body 분리 — `regulation_heading_split`(ceiling 제거) + `split_inlines_at`. 본문화조 23→0, 헤딩=마커+제목만. 골든 5개 재생성.
 - **F-D3**: ✅ (S100) 목록 이중번호 — `strip_leading_list_marker`(ordered+bullet), 골든 5개 재생성(더블마커 0).
-- **F-D4**: 헤딩 마커 뒤 과다 공백 정규화
+- **F-D4**: ✅ (S100) 헤딩 마커 공백 정규화 — generic heading emission 2곳에 `trim_edge_whitespace`(regulation은 F-D1/D2서 해소). 비-regulation 방어.
 
 ## 라이선스
 

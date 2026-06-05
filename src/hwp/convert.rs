@@ -242,8 +242,26 @@ pub(crate) fn hwp_to_ir(hwp: &HwpDocument) -> ir::Document {
         // Stage each paragraph (or control block) into a StagedBlock, then
         // collapse consecutive list-item paragraphs into Block::List values.
         let mut staged: Vec<StagedBlock> = Vec::new();
+        // Header/footer controls are hoisted to the section level rather than
+        // emitted inline (control_to_block returns None for them).
+        let mut header: Option<Vec<ir::Block>> = None;
+        let mut footer: Option<Vec<ir::Block>> = None;
 
         for para in &section.paragraphs {
+            for ctrl in &para.controls {
+                if let HwpControl::HeaderFooter {
+                    is_footer,
+                    paragraphs,
+                } = ctrl
+                {
+                    let content: Vec<ir::Block> = paragraphs
+                        .iter()
+                        .flat_map(|p| paragraph_to_blocks(p, &hwp.doc_info))
+                        .collect();
+                    let slot = if *is_footer { &mut footer } else { &mut header };
+                    slot.get_or_insert_with(Vec::new).extend(content);
+                }
+            }
             paragraph_to_staged_counted(
                 para,
                 &hwp.doc_info,
@@ -257,6 +275,8 @@ pub(crate) fn hwp_to_ir(hwp: &HwpDocument) -> ir::Document {
         doc.sections.push(ir::Section {
             blocks,
             page_layout: None,
+            header,
+            footer,
             ..Default::default()
         });
     }
@@ -529,6 +549,9 @@ pub(crate) fn control_to_block(ctrl: &HwpControl, doc_info: &DocInfo) -> Option<
         // B-3).  Column breaks remain unmodelled and are silently dropped.
         HwpControl::PageBreak => Some(ir::Block::PageBreak),
         HwpControl::ColumnBreak => None,
+        // Header/footer controls are hoisted to `Section.header`/`footer` in
+        // `hwp_to_ir`, not emitted as inline body blocks.
+        HwpControl::HeaderFooter { .. } => None,
     }
 }
 

@@ -205,6 +205,13 @@ pub enum HwpControl {
         is_endnote: bool,
         paragraphs: Vec<HwpParagraph>,
     },
+    /// Page header (`head`) or footer (`foot`) control with nested body
+    /// paragraphs. Hoisted to `Section.header`/`footer` during IR conversion
+    /// rather than emitted as a body block.
+    HeaderFooter {
+        is_footer: bool,
+        paragraphs: Vec<HwpParagraph>,
+    },
     Ruby {
         base_text: String,
         ruby_text: String,

@@ -52,6 +52,10 @@ pub const CTRL_PAGE_BREAK: u32 = ctrl_id(b"pgbk");
 pub const CTRL_COL_BREAK: u32 = ctrl_id(b"clbk");
 pub const CTRL_HYPERLINK: u32 = ctrl_id(b"hyln");
 pub const CTRL_RUBY: u32 = ctrl_id(b"ruby");
+/// Page header control id (HWP 5.0 spec 표30: 머리말).
+pub const CTRL_PAGE_HEADER: u32 = ctrl_id(b"head");
+/// Page footer control id (HWP 5.0 spec 표30: 꼬리말).
+pub const CTRL_PAGE_FOOTER: u32 = ctrl_id(b"foot");
 
 // `const fn` cannot take [u8; 4] by value because arrays aren't Copy in const context pre-1.66.
 #[allow(clippy::trivially_copy_pass_by_ref)]

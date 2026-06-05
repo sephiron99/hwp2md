@@ -726,6 +726,12 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
 - 테스트: ref id == def id + MD `[^footnote-1]`/`[^footnote-1]:` 렌더. 기존 sequential-id 테스트 호환.
 - 검증: lib 1290 tests, clippy clean.
 
+### R3 — HWP 바이너리 머리말/꼬리말 읽기 ✅
+- 문제: HWP 경로가 `..Default`로 Section.header/footer=None → 원본 머리말/꼬리말 텍스트 전부 소실(HWPX/MD 측은 기존 지원).
+- 수정: `HwpControl::HeaderFooter{is_footer,paragraphs}` variant 추가. record.rs `CTRL_PAGE_HEADER`(head)/`CTRL_PAGE_FOOTER`(foot) 상수 + dispatcher arm(각주와 동일 패턴). `hwp_to_ir` section 루프에서 header/footer control을 Section 레벨로 hoist(본문 블록에 누출 안 됨). control_to_block은 HeaderFooter→None.
+- 테스트: dispatcher 2(head/foot record→variant) + convert 1(hoist + 본문 비누출). lib 1293 tests, clippy clean.
+- ⚠️ **실 fixture 미검증**: 머리말 포함 .hwp fixture 부재로 ctrl_id 매직바이트(head/foot)는 HWP 5.0 스펙 표30 기준. 파싱 파이프라인·hoist 로직은 검증됨. 실 문서 e2e는 머리말 포함 HWP 확보 시 추가.
+
 ---
 
 ## Sprint 98 — 2026-06-05

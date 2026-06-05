@@ -344,6 +344,72 @@ fn hwp_to_ir_footnote_emits_inline_ref_matching_definition() {
 }
 
 #[test]
+fn hwp_to_ir_header_footer_controls_hoisted_to_section() {
+    // R3: HWP binary header/footer controls must populate Section.header/footer
+    // (previously the HWP path set them to None via ..Default).
+    let mut hwp = make_hwp_document();
+    let head_para = HwpParagraph {
+        text: "머리말 텍스트".into(),
+        char_shape_ids: Vec::new(),
+        para_shape_id: 0,
+        style_id: 0,
+        controls: Vec::new(),
+        raw_para_text: None,
+    };
+    let foot_para = HwpParagraph {
+        text: "꼬리말 텍스트".into(),
+        char_shape_ids: Vec::new(),
+        para_shape_id: 0,
+        style_id: 0,
+        controls: Vec::new(),
+        raw_para_text: None,
+    };
+    hwp.sections.push(HwpSection {
+        paragraphs: vec![HwpParagraph {
+            text: "본문".into(),
+            char_shape_ids: Vec::new(),
+            para_shape_id: 0,
+            style_id: 0,
+            controls: vec![
+                HwpControl::HeaderFooter {
+                    is_footer: false,
+                    paragraphs: vec![head_para],
+                },
+                HwpControl::HeaderFooter {
+                    is_footer: true,
+                    paragraphs: vec![foot_para],
+                },
+            ],
+            raw_para_text: None,
+        }],
+    });
+
+    let doc = hwp_to_ir(&hwp);
+    let section = &doc.sections[0];
+
+    let header = section.header.as_ref().expect("Section.header must be Some");
+    assert!(
+        header.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+            if inlines.iter().any(|i| i.text.contains("머리말")))),
+        "header must carry the header text; got {header:?}"
+    );
+
+    let footer = section.footer.as_ref().expect("Section.footer must be Some");
+    assert!(
+        footer.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+            if inlines.iter().any(|i| i.text.contains("꼬리말")))),
+        "footer must carry the footer text; got {footer:?}"
+    );
+
+    // The header/footer controls must NOT leak into the body blocks.
+    assert!(
+        !section.blocks.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+            if inlines.iter().any(|i| i.text.contains("머리말") || i.text.contains("꼬리말")))),
+        "header/footer text must not appear in body blocks"
+    );
+}
+
+#[test]
 fn hwp_to_ir_two_endnotes_get_sequential_ids() {
     let make_en_ctrl = || HwpControl::FootnoteEndnote {
         is_endnote: true,

@@ -7,8 +7,8 @@ use crate::hwp::model::{HwpControl, HwpParagraph};
 use crate::hwp::reader::{extract_paragraph_text_with_raw, parse_char_shape_refs};
 use crate::hwp::record::{
     read_utf16le_str, Record, CTRL_COL_BREAK, CTRL_ENDNOTE, CTRL_FOOTNOTE, CTRL_GSHAPE,
-    CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_RUBY, CTRL_TABLE, HWPTAG_CTRL_HEADER, HWPTAG_EQEDIT,
-    HWPTAG_PARA_CHAR_SHAPE, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT,
+    CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_PAGE_FOOTER, CTRL_PAGE_HEADER, CTRL_RUBY, CTRL_TABLE,
+    HWPTAG_CTRL_HEADER, HWPTAG_EQEDIT, HWPTAG_PARA_CHAR_SHAPE, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT,
 };
 
 /// Extract `HwpParagraph`s from records in `[start, end)`, treating them as a
@@ -152,6 +152,22 @@ pub(crate) fn parse_ctrl_header_at(records: &[Record], ctrl_idx: usize) -> Optio
                 paragraphs,
             })
         }
+        CTRL_PAGE_HEADER => {
+            let ctrl_end = find_children_end(records, ctrl_idx);
+            let paragraphs = extract_paragraphs_from_range(records, ctrl_idx + 1, ctrl_end);
+            Some(HwpControl::HeaderFooter {
+                is_footer: false,
+                paragraphs,
+            })
+        }
+        CTRL_PAGE_FOOTER => {
+            let ctrl_end = find_children_end(records, ctrl_idx);
+            let paragraphs = extract_paragraphs_from_range(records, ctrl_idx + 1, ctrl_end);
+            Some(HwpControl::HeaderFooter {
+                is_footer: true,
+                paragraphs,
+            })
+        }
         CTRL_HYPERLINK => {
             let url = parse_hyperlink_url(rec);
             if url.is_empty() {
@@ -185,8 +201,9 @@ mod tests {
     use super::*;
     use crate::hwp::reader::encode_u16s_test;
     use crate::hwp::record::{
-        CTRL_ENDNOTE, CTRL_FOOTNOTE, CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_TABLE,
-        HWPTAG_CTRL_HEADER, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT, HWPTAG_TABLE,
+        CTRL_ENDNOTE, CTRL_FOOTNOTE, CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_PAGE_FOOTER,
+        CTRL_PAGE_HEADER, CTRL_TABLE, HWPTAG_CTRL_HEADER, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT,
+        HWPTAG_TABLE,
     };
 
     fn make_record_with_data(tag_id: u16, level: u16, data: Vec<u8>) -> Record {
@@ -269,6 +286,34 @@ mod tests {
             ctrl,
             HwpControl::FootnoteEndnote {
                 is_endnote: true,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_ctrl_header_at_header_returns_header_footer() {
+        let head_id = CTRL_PAGE_HEADER.to_le_bytes().to_vec();
+        let records = vec![make_record_with_data(HWPTAG_CTRL_HEADER, 0, head_id)];
+        let ctrl = parse_ctrl_header_at(&records, 0).expect("Some");
+        assert!(matches!(
+            ctrl,
+            HwpControl::HeaderFooter {
+                is_footer: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_ctrl_header_at_footer_returns_header_footer() {
+        let foot_id = CTRL_PAGE_FOOTER.to_le_bytes().to_vec();
+        let records = vec![make_record_with_data(HWPTAG_CTRL_HEADER, 0, foot_id)];
+        let ctrl = parse_ctrl_header_at(&records, 0).expect("Some");
+        assert!(matches!(
+            ctrl,
+            HwpControl::HeaderFooter {
+                is_footer: true,
                 ..
             }
         ));

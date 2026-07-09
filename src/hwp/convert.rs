@@ -81,49 +81,48 @@ pub(crate) fn detect_list_kind(para: &HwpParagraph, doc_info: &DocInfo) -> Optio
     detect_list_kind_from_text(text)
 }
 
-/// Return `true` when `text` starts with a common ordered-list prefix such as
-/// `"1. "`, `"2) "`, `"a. "`, `"i. "`, etc.
+/// Parse a leading ordinal marker — `<1-3 digits | single ASCII letter><. | )>`
+/// immediately followed by whitespace or end-of-string — from the start of `s`
+/// (callers trim leading space first). Returns the numeric value (present only
+/// for numeric markers, `None` for alphabetic `a.`/`i)`) together with the byte
+/// offset just past the separator, or `None` when `s` has no ordinal marker.
 ///
-/// We deliberately avoid matching year-like patterns such as `"2026년…"` by
-/// requiring that the numeric prefix is short (≤ 3 digits) **and** immediately
-/// followed by `.` or `)` and then whitespace (or end-of-string).
-fn is_ordered_prefix(text: &str) -> bool {
-    let s = text.trim_start_matches(' ');
-
-    let Some(first) = s.chars().next() else {
-        return false;
-    };
-
-    if first.is_ascii_digit() {
-        // Count consecutive digits (must be ≤ 3 to reject "2026년…").
+/// The ≤ 3-digit cap deliberately rejects year-like prefixes such as `"2026년…"`.
+/// This is the single source of truth for the ordinal grammar shared by
+/// [`is_ordered_prefix`], [`strip_ordinal_marker`], and [`leading_ordinal`].
+fn parse_ordinal_marker(s: &str) -> Option<(Option<u32>, usize)> {
+    let first = s.chars().next()?;
+    let (body_end, value) = if first.is_ascii_digit() {
+        // Count consecutive digits (must be ≤ 3). ASCII digits: byte len == count.
         let digit_end = s
             .char_indices()
             .take_while(|(_, c)| c.is_ascii_digit())
             .last()
             .map_or(0, |(i, c)| i + c.len_utf8());
-        let digit_count = digit_end; // ASCII digits: byte length == char count
-        if digit_count == 0 || digit_count > 3 {
-            return false;
+        if digit_end == 0 || digit_end > 3 {
+            return None;
         }
-        let rest = &s[digit_end..];
-        let sep = rest.chars().next();
-        if matches!(sep, Some('.' | ')')) {
-            let after_sep = &rest[1..]; // separator is ASCII, 1 byte
-            return matches!(after_sep.chars().next(), Some(' ' | '\t') | None);
-        }
-        return false;
+        (digit_end, s[..digit_end].parse::<u32>().ok())
+    } else if first.is_ascii_alphabetic() {
+        (1, None) // single ASCII letter (a., i)); no numeric start value
+    } else {
+        return None;
+    };
+    let rest = &s[body_end..];
+    if !matches!(rest.chars().next(), Some('.' | ')')) {
+        return None;
     }
-
-    if first.is_ascii_alphabetic() {
-        let rest = &s[1..]; // letter is ASCII, 1 byte
-        let sep = rest.chars().next();
-        if matches!(sep, Some('.' | ')')) {
-            let after_sep = &rest[1..];
-            return matches!(after_sep.chars().next(), Some(' ' | '\t') | None);
-        }
+    let after_sep = body_end + 1; // separator is ASCII (1 byte)
+    match s[after_sep..].chars().next() {
+        Some(' ' | '\t') | None => Some((value, after_sep)),
+        _ => None,
     }
+}
 
-    false
+/// Return `true` when `text` starts with a common ordered-list prefix such as
+/// `"1. "`, `"2) "`, `"a. "`, `"i. "`, etc.
+fn is_ordered_prefix(text: &str) -> bool {
+    parse_ordinal_marker(text.trim_start_matches(' ')).is_some()
 }
 
 /// Strip a leading ordinal (`1.`, `12)`, `a.`) or bullet (`●`, `-`, …) marker
@@ -151,32 +150,8 @@ fn marker_stripped(text: &str) -> Option<String> {
 /// Strip `<1-3 digits | single ASCII letter><. | )>` when followed by
 /// whitespace or end-of-string. Returns the remainder after the separator.
 fn strip_ordinal_marker(s: &str) -> Option<&str> {
-    let first = s.chars().next()?;
-    let body_end = if first.is_ascii_digit() {
-        let digit_end = s
-            .char_indices()
-            .take_while(|(_, c)| c.is_ascii_digit())
-            .last()
-            .map_or(0, |(i, c)| i + c.len_utf8());
-        if digit_end == 0 || digit_end > 3 {
-            return None;
-        }
-        digit_end
-    } else if first.is_ascii_alphabetic() {
-        1
-    } else {
-        return None;
-    };
-    let rest = &s[body_end..];
-    let sep = rest.chars().next()?;
-    if sep != '.' && sep != ')' {
-        return None;
-    }
-    let after = &rest[1..]; // separator is ASCII (1 byte)
-    match after.chars().next() {
-        Some(' ' | '\t') | None => Some(after),
-        _ => None,
-    }
+    let (_, after_sep) = parse_ordinal_marker(s)?;
+    Some(&s[after_sep..])
 }
 
 /// Strip a single bullet character when followed by whitespace or end-of-string.
@@ -193,6 +168,17 @@ fn strip_bullet_marker(s: &str) -> Option<&str> {
         Some(' ' | '\t') | None => Some(after),
         _ => None,
     }
+}
+
+/// Parse the numeric value of a leading ordinal marker (`8.`, `12)`) using the
+/// same shape [`strip_ordinal_marker`] accepts, so an ordered list the author
+/// started at a non-1 number keeps that start value instead of being silently
+/// renumbered from 1 by the Markdown writer.
+///
+/// Returns `None` for bullet, alphabetic (`a.`, `i.`), or absent markers — those
+/// keep the default start of 1, matching prior behaviour.
+fn leading_ordinal(text: &str) -> Option<u32> {
+    parse_ordinal_marker(text.trim_start())?.0
 }
 
 /// Split a run of inlines at a character offset, preserving per-run formatting.
@@ -289,7 +275,13 @@ fn detect_list_kind_from_text(text: &str) -> Option<ListKind> {
 #[derive(Debug)]
 enum StagedBlock {
     Plain(ir::Block),
-    ListPara { ordered: bool, block: ir::Block },
+    ListPara {
+        ordered: bool,
+        /// Literal leading ordinal (`8.` → `Some(8)`) for ordered items, so a
+        /// list resuming at a non-1 number keeps its start. `None` → start 1.
+        start: Option<u32>,
+        block: ir::Block,
+    },
 }
 
 /// Collapse a flat sequence of [`StagedBlock`]s into a proper `Vec<ir::Block>`
@@ -305,14 +297,14 @@ enum StagedBlock {
 fn group_list_paragraphs(staged: Vec<StagedBlock>) -> Vec<ir::Block> {
     let mut out: Vec<ir::Block> = Vec::with_capacity(staged.len());
 
-    // Pending run: (ordered, accumulated items).
-    let mut pending: Option<(bool, Vec<ir::ListItem>)> = None;
+    // Pending run: (ordered, resolved start ordinal, accumulated items).
+    let mut pending: Option<(bool, u32, Vec<ir::ListItem>)> = None;
 
-    let flush = |pending: &mut Option<(bool, Vec<ir::ListItem>)>, out: &mut Vec<ir::Block>| {
-        if let Some((ordered, items)) = pending.take() {
+    let flush = |pending: &mut Option<(bool, u32, Vec<ir::ListItem>)>, out: &mut Vec<ir::Block>| {
+        if let Some((ordered, start, items)) = pending.take() {
             out.push(ir::Block::List {
                 ordered,
-                start: 1,
+                start,
                 items,
             });
         }
@@ -324,20 +316,26 @@ fn group_list_paragraphs(staged: Vec<StagedBlock>) -> Vec<ir::Block> {
                 flush(&mut pending, &mut out);
                 out.push(block);
             }
-            StagedBlock::ListPara { ordered, block } => {
+            StagedBlock::ListPara {
+                ordered,
+                start,
+                block,
+            } => {
                 let item = ir::ListItem {
                     blocks: vec![block],
                     children: vec![],
                     checked: None,
                 };
                 match pending {
-                    Some((ref p_ordered, ref mut items)) if *p_ordered == ordered => {
+                    Some((ref p_ordered, _, ref mut items)) if *p_ordered == ordered => {
                         items.push(item);
                     }
                     _ => {
                         // Different type or no pending list — flush old, start new.
+                        // The group's start is the first item's literal ordinal
+                        // (ordered lists only); default 1 preserves prior output.
                         flush(&mut pending, &mut out);
-                        pending = Some((ordered, vec![item]));
+                        pending = Some((ordered, start.unwrap_or(1), vec![item]));
                     }
                 }
             }
@@ -529,11 +527,21 @@ fn paragraph_to_staged_counted(
         }
         match detect_list_kind(para, doc_info) {
             Some(kind) => {
+                let ordered = matches!(kind, ListKind::Ordered);
+                // Capture the literal ordinal (`8.`) before stripping the marker,
+                // so an ordered list resuming at a non-1 number keeps its start
+                // instead of being renumbered from 1 by the writer.
+                let start = if ordered {
+                    inlines.first().and_then(|i| leading_ordinal(&i.text))
+                } else {
+                    None
+                };
                 // Strip any ordinal/bullet marker embedded in the text so the
                 // Markdown writer's own marker is not duplicated (F-D3).
                 strip_leading_list_marker(&mut inlines);
                 out.push(StagedBlock::ListPara {
-                    ordered: matches!(kind, ListKind::Ordered),
+                    ordered,
+                    start,
                     block: ir::Block::Paragraph { inlines },
                 });
             }
@@ -647,11 +655,22 @@ pub(crate) fn control_to_block(ctrl: &HwpControl, doc_info: &DocInfo) -> Option<
             alt: String::new(),
         }),
         HwpControl::Equation { script } => {
-            let tex = eqedit_to_latex(script);
-            Some(ir::Block::Math {
-                display: false,
-                tex,
-            })
+            // Strip any control characters (C0/C1, DEL) that a malformed or
+            // degenerate EQEDIT script could carry into the LaTeX output — a raw
+            // control byte must never reach Markdown.  If nothing renderable
+            // remains, emit no Math block at all rather than an empty `$…$` span.
+            let tex: String = eqedit_to_latex(script)
+                .chars()
+                .filter(|c| !c.is_control())
+                .collect();
+            if tex.trim().is_empty() {
+                None
+            } else {
+                Some(ir::Block::Math {
+                    display: false,
+                    tex,
+                })
+            }
         }
         HwpControl::FootnoteEndnote {
             is_endnote,

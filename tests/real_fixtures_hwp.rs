@@ -107,6 +107,48 @@ fn real_fixtures_no_garbled_chars() {
     );
 }
 
+/// Verify that converting all five real HWP fixtures produces no raw control
+/// bytes (C0 range 0x00–0x1F except tab/newline, plus DEL 0x7F).
+///
+/// Regression guard for the G001 `$<NUL>$` bug: an empty EQEDIT anchor object
+/// in `moel_02_vocational_training.hwp` was misread (wrong script offset) as a
+/// single NUL code unit and leaked a raw 0x00 byte into the Markdown as
+/// `$<NUL>$`. A raw control byte in text output makes the file binary-detected
+/// by downstream tooling, so none may ever reach the writer.
+#[test]
+fn real_fixtures_no_control_bytes() {
+    let fixtures = [
+        "moel_01_goyang_center",
+        "moel_02_vocational_training",
+        "moel_03_livelihood_loan",
+        "moel_04_instructor_education",
+        "moel_05_quality_management",
+    ];
+
+    let mut failures: Vec<String> = Vec::new();
+
+    for stem in fixtures {
+        let md_output = convert_hwp_to_md(stem);
+        if let Some((offset, byte)) = md_output
+            .bytes()
+            .enumerate()
+            .find(|&(_, b)| (b < 0x20 && b != b'\t' && b != b'\n') || b == 0x7f)
+        {
+            let ctx_start = offset.saturating_sub(12);
+            let ctx = &md_output.as_bytes()[ctx_start..(offset + 12).min(md_output.len())];
+            failures.push(format!(
+                "  {stem}: control byte 0x{byte:02x} at offset {offset}; context: {ctx:?}"
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "raw control bytes found in converted output:\n{}",
+        failures.join("\n")
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Golden-file comparison tests (ignored until Sprint 52 golden regeneration)
 // ---------------------------------------------------------------------------

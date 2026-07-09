@@ -224,6 +224,44 @@ fn control_to_block_equation_produces_math_block() {
 }
 
 #[test]
+fn control_to_block_equation_control_only_script_returns_none() {
+    // A script made purely of control chars (NUL + DEL) has nothing
+    // renderable after stripping → no Math block at all.
+    let ctrl = HwpControl::Equation {
+        script: "\u{0}\u{7f}".into(),
+    };
+    let doc_info = DocInfo::default();
+    assert!(
+        control_to_block(&ctrl, &doc_info).is_none(),
+        "control-only equation script must produce no block"
+    );
+}
+
+#[test]
+fn control_to_block_equation_mixed_control_chars_stripped() {
+    // "A\0B": embedded NUL must be stripped; tex keeps A and B and carries
+    // no control char whatsoever.
+    let ctrl = HwpControl::Equation {
+        script: "A\u{0}B".into(),
+    };
+    let doc_info = DocInfo::default();
+    let block = control_to_block(&ctrl, &doc_info).expect("Some Math block");
+    match block {
+        ir::Block::Math { tex, .. } => {
+            assert!(
+                !tex.chars().any(|c| c.is_control()),
+                "no control char may survive into tex, got {tex:?}"
+            );
+            assert!(
+                tex.contains('A') && tex.contains('B'),
+                "real chars must be preserved, got {tex:?}"
+            );
+        }
+        other => panic!("expected Math block, got {other:?}"),
+    }
+}
+
+#[test]
 fn control_to_block_ftp_hyperlink_accepted() {
     let ctrl = HwpControl::Hyperlink {
         url: "ftp://files.example.com/archive.tar.gz".into(),

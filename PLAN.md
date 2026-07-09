@@ -295,6 +295,13 @@ Sprint 96 완료 (2026-05-31). 1543 tests. image split + roundtrip helpers + los
 - **F-D3**: ✅ (S100) 목록 이중번호 — `strip_leading_list_marker`(ordered+bullet), 골든 5개 재생성(더블마커 0).
 - **F-D4**: ✅ (S100) 헤딩 마커 공백 정규화 — generic heading emission 2곳에 `trim_edge_whitespace`(regulation은 F-D1/D2서 해소). 비-regulation 방어.
 
+## Sprint 101 완료 (2026-07-01) ✅
+
+R5/G001·G002 pre-verification에서 로그된 NG3(별표 2 dropped-table + null-equation-byte 버그) 및 목록 번호 연속성 후속. `$<NUL>$` 회귀 + 목록 재번호 수정.
+
+- **NG3**: ✅ HWPTAG_EQEDIT 스크립트 오프셋 버그 수정 — UINT32 attribute word(4바이트)를 건너뛰지 않고 offset 2에서 읽어, 빈 스크립트(len==0)의 attribute 상위 2바이트를 WCHAR 길이 프리픽스로 오독 → 단일 NUL 코드유닛이 `Block::Math { tex: "\0" }`로 leak되어 Markdown에 `$<NUL>$`로 출력되던 결함. `read_utf16le_str(&rec.data, 4)`로 수정 + dispatcher/convert.rs 이중 방어(제어문자·공백뿐인 스크립트는 Math 블록 자체를 생성하지 않음). moel_02_vocational_training 골든 재생성(별표 2 `$$` 라인 제거). 회귀 테스트: `eqedit_real_script_read_at_offset_four`, `eqedit_nul_only_script_is_dropped`, `eqedit_adversarial_*`(5건), `control_to_block_equation_control_only_script_returns_none`, `real_fixtures_no_control_bytes`. 전체 테스트 통과, clippy clean.
+- **NG3-list (G002)**: ✅ 목록 번호 연속성 수정 — `group_list_paragraphs`가 모든 `Block::List.start`를 1로 하드코딩 + `strip_leading_list_marker`가 리터럴 서수를 제거해, 1이 아닌 번호로 시작/재개하는 목록(예: 7-1 삽입 후 8·9·10·11, moel_05 서약 2~7)이 1부터 재번호되던 결함. 원본에 HWPTAG_NUMBERING 레코드가 전무(전부 free-typed 마커)함을 raw-record probe로 확인. `leading_ordinal`로 첫 항목 서수를 stripping 전에 포착해 `StagedBlock::ListPara.start` → `Block::List.start`로 전달(writer는 이미 start 존중). 서수 문법 3중복 제거를 위해 `parse_ordinal_marker` 단일화(behavior-preserving: 골든 byte-identical, 85 detect + 42 list 테스트). moel_01/02/03/05 골든 재생성(마커 번호만, 원본 대조). 회귀 테스트: `leading_ordinal_*`, `hwp_to_ir_list_resuming_after_interruption_keeps_source_numbering` 외 adversarial 5건. 1325 lib + 전체 integration 통과, clippy -D warnings clean.
+
 ## 라이선스
 
 GPL-3.0-only

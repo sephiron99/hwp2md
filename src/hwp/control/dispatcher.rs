@@ -70,8 +70,23 @@ pub(crate) fn extract_paragraphs_from_range(
             }
             HWPTAG_EQEDIT => {
                 if let Some(ref mut p) = current {
-                    let (script, _) = read_utf16le_str(&rec.data, 2);
-                    if !script.is_empty() {
+                    // HWP 5.0 EQEDIT record layout (Hancom spec 표 118 / node-hwp
+                    // `record.format`): a UINT32 attribute word (only the low bit,
+                    // LineMode, is meaningful) precedes the equation script, which
+                    // is stored as a length-prefixed WCHAR string.  The script
+                    // therefore begins at byte offset 4, NOT 2.  Reading at offset
+                    // 2 mistook the high 2 bytes of the attribute for the WCHAR
+                    // length prefix, so an empty script (`len == 0`) was misread as
+                    // a single NUL code unit and produced a `Block::Math { tex:
+                    // "\0" }` that leaked a raw NUL byte into Markdown as `$<NUL>$`.
+                    let (script, _) = read_utf16le_str(&rec.data, 4);
+                    // Drop control-only/whitespace scripts (e.g. an empty anchor
+                    // equation object): they carry no renderable math and must not
+                    // emit a `$…$` span.
+                    if script
+                        .chars()
+                        .any(|c| !c.is_control() && !c.is_whitespace())
+                    {
                         p.controls.push(HwpControl::Equation { script });
                     }
                 }
@@ -202,8 +217,8 @@ mod tests {
     use crate::hwp::reader::encode_u16s_test;
     use crate::hwp::record::{
         CTRL_ENDNOTE, CTRL_FOOTNOTE, CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_PAGE_FOOTER,
-        CTRL_PAGE_HEADER, CTRL_TABLE, HWPTAG_CTRL_HEADER, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT,
-        HWPTAG_TABLE,
+        CTRL_PAGE_HEADER, CTRL_TABLE, HWPTAG_CTRL_HEADER, HWPTAG_EQEDIT, HWPTAG_PARA_HEADER,
+        HWPTAG_PARA_TEXT, HWPTAG_TABLE,
     };
 
     fn make_record_with_data(tag_id: u16, level: u16, data: Vec<u8>) -> Record {
@@ -475,5 +490,188 @@ mod tests {
         let paras = extract_paragraphs_from_range(&records, 0, records.len());
         assert_eq!(paras.len(), 1);
         assert_eq!(paras[0].style_id, 0);
+    }
+    // -----------------------------------------------------------------------
+    // HWPTAG_EQEDIT parsing (regression: `$<NUL>$` artifact, offset bug)
+    // -----------------------------------------------------------------------
+
+    /// Build an EQEDIT record body: UINT32 attribute word + length-prefixed
+    /// UTF-16LE script, matching the real HWP 5.0 layout.
+    fn make_eqedit_record(level: u16, script: &[u16]) -> Record {
+        let mut data = vec![0u8; 4]; // UINT32 attribute
+        data.extend_from_slice(&u16::try_from(script.len()).unwrap().to_le_bytes());
+        for &u in script {
+            data.extend_from_slice(&u.to_le_bytes());
+        }
+        make_record_with_data_plain(HWPTAG_EQEDIT, level, data)
+    }
+
+    #[test]
+    fn eqedit_empty_script_produces_no_equation_control() {
+        // Real fixture case: an empty anchor equation (len == 0 at offset 4).
+        // Must NOT push any Equation control — the old offset-2 read misread the
+        // empty script as a single NUL WCHAR and leaked `$<NUL>$` into Markdown.
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &[]),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert!(
+            paras[0].controls.is_empty(),
+            "empty EQEDIT script must yield no control, got {:?}",
+            paras[0].controls
+        );
+    }
+
+    #[test]
+    fn eqedit_nul_only_script_is_dropped() {
+        // A script that is a single NUL code unit (0x0000) carries no renderable
+        // math and must be dropped by the control/whitespace guard.
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &[0x0000]),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert!(
+            paras[0].controls.is_empty(),
+            "NUL-only EQEDIT script must be dropped, got {:?}",
+            paras[0].controls
+        );
+    }
+
+    #[test]
+    fn eqedit_real_script_read_at_offset_four() {
+        // A genuine script ("a+b") stored after the 4-byte attribute must be read
+        // verbatim — proving the offset-4 layout, not offset-2.
+        let script: Vec<u16> = "a+b".encode_utf16().collect();
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &script),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].controls.len(), 1);
+        assert!(
+            matches!(&paras[0].controls[0], HwpControl::Equation { script } if script == "a+b"),
+            "expected Equation{{script:\"a+b\"}}, got {:?}",
+            paras[0].controls[0]
+        );
+    }
+    // -----------------------------------------------------------------------
+    // HWPTAG_EQEDIT adversarial / red-team cases (G001)
+    // -----------------------------------------------------------------------
+
+    /// (a) Record shorter than 6 bytes: 4-byte attribute only, no length
+    /// prefix. The offset-4 read must yield an empty script → no control,
+    /// and must not panic on the truncated buffer.
+    #[test]
+    fn eqedit_adversarial_record_shorter_than_six_bytes() {
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_record_with_data_plain(HWPTAG_EQEDIT, 3, vec![0u8; 4]),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert!(
+            paras[0].controls.is_empty(),
+            "attribute-only EQEDIT must yield no control, got {:?}",
+            paras[0].controls
+        );
+    }
+
+    /// (b) Length prefix far larger than the remaining data. `read_utf16le`
+    /// must clamp at the buffer end (no over-read / panic); only the WCHARs
+    /// actually present become script.
+    #[test]
+    fn eqedit_adversarial_len_prefix_larger_than_data() {
+        // [UINT32 attr][UINT16 len = 0x7FFF][single WCHAR 'X']
+        let mut data = vec![0u8; 4];
+        data.extend_from_slice(&0x7FFFu16.to_le_bytes());
+        data.extend_from_slice(&u16::from(b'X').to_le_bytes());
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_record_with_data_plain(HWPTAG_EQEDIT, 3, data),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].controls.len(), 1);
+        assert!(
+            matches!(&paras[0].controls[0], HwpControl::Equation { script } if script == "X"),
+            "over-claimed len must clamp to present data, got {:?}",
+            paras[0].controls[0]
+        );
+    }
+
+    /// (c) Non-empty script mixing embedded control chars with real chars. The
+    /// dispatcher keeps it (renderable chars present); the IR conversion must
+    /// strip every control char so none survives into the Math tex.
+    #[test]
+    fn eqedit_adversarial_mixed_control_chars_stripped_in_tex() {
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &[0x0041, 0x0000, 0x0042]), // "A\0B"
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].controls.len(), 1);
+        let doc_info = crate::hwp::model::DocInfo::default();
+        let block = crate::hwp::convert::control_to_block(&paras[0].controls[0], &doc_info)
+            .expect("mixed script should still produce a Math block");
+        match block {
+            crate::ir::Block::Math { tex, .. } => {
+                assert!(
+                    !tex.chars().any(|c| c.is_control()),
+                    "no control char may survive into tex, got {tex:?}"
+                );
+                assert!(
+                    tex.contains('A') && tex.contains('B'),
+                    "real chars must be preserved, got {tex:?}"
+                );
+            }
+            other => panic!("expected Math block, got {other:?}"),
+        }
+    }
+
+    /// (d) A lone high-surrogate WCHAR (0xD800). `from_utf16_lossy` maps it to
+    /// U+FFFD (not control, not whitespace), so a control may be produced, but
+    /// no control byte reaches the tex and nothing panics.
+    #[test]
+    fn eqedit_adversarial_lone_high_surrogate() {
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &[0xD800]),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        let doc_info = crate::hwp::model::DocInfo::default();
+        for ctrl in &paras[0].controls {
+            if let Some(crate::ir::Block::Math { tex, .. }) =
+                crate::hwp::convert::control_to_block(ctrl, &doc_info)
+            {
+                assert!(
+                    !tex.chars().any(|c| c.is_control()),
+                    "lone surrogate must not leak a control byte, got {tex:?}"
+                );
+            }
+        }
+    }
+
+    /// (e) A DEL (0x7F) code unit alone. DEL is a control char, so the
+    /// dispatcher guard drops the script entirely — no Equation control.
+    #[test]
+    fn eqedit_adversarial_del_only_script_dropped() {
+        let records = vec![
+            make_record_with_data_plain(HWPTAG_PARA_HEADER, 2, vec![0u8; 6]),
+            make_eqedit_record(3, &[0x007F]),
+        ];
+        let paras = extract_paragraphs_from_range(&records, 0, records.len());
+        assert_eq!(paras.len(), 1);
+        assert!(
+            paras[0].controls.is_empty(),
+            "DEL-only EQEDIT script must be dropped, got {:?}",
+            paras[0].controls
+        );
     }
 }

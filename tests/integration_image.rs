@@ -46,7 +46,10 @@ fn hwpx_img_element_produces_image_block_and_markdown() {
     assert!(
         image_block.is_some(),
         "expected an Image block; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::Image { src, alt } = image_block.unwrap() else {
         unreachable!("already asserted Image variant")
@@ -83,7 +86,10 @@ fn hwpx_img_element_src_attr_also_produces_image_block() {
     assert!(
         image_block.is_some(),
         "expected an Image block from src= attr; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::Image { src, alt } = image_block.unwrap() else {
         unreachable!("already asserted Image variant")

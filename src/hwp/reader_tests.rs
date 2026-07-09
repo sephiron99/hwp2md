@@ -368,7 +368,10 @@ fn maybe_decompress_bin_follow_policy_inflates_when_doc_compressed() {
     // type word 0x0001 = embedding, compress policy 0 (follow document flag).
     let png = vec![0x89u8, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
     let out = maybe_decompress_bin(deflate(&png), 0x0001, true);
-    assert_eq!(out, png, "embedded BinData must be inflated when doc compressed");
+    assert_eq!(
+        out, png,
+        "embedded BinData must be inflated when doc compressed"
+    );
 }
 
 #[test]
@@ -376,7 +379,10 @@ fn maybe_decompress_bin_follow_policy_raw_when_doc_uncompressed() {
     // policy 0 + doc not compressed → stored raw, no inflate.
     let png = vec![0x89u8, b'P', b'N', b'G'];
     let out = maybe_decompress_bin(png.clone(), 0x0001, false);
-    assert_eq!(out, png, "raw bytes must pass through when doc uncompressed");
+    assert_eq!(
+        out, png,
+        "raw bytes must pass through when doc uncompressed"
+    );
 }
 
 #[test]
@@ -384,7 +390,10 @@ fn maybe_decompress_bin_always_policy_inflates_even_when_doc_uncompressed() {
     // compress bits = 01 (always) → 0x0010 | embedding 0x0001.
     let png = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
     let out = maybe_decompress_bin(deflate(&png), 0x0011, false);
-    assert_eq!(out, png, "always-compress policy must inflate regardless of doc flag");
+    assert_eq!(
+        out, png,
+        "always-compress policy must inflate regardless of doc flag"
+    );
 }
 
 #[test]
@@ -402,7 +411,10 @@ fn maybe_decompress_bin_keeps_raw_on_decompress_failure() {
     // not panic or drop the entry.
     let garbage = vec![0x00u8, 0x01, 0x02, 0x03, b'r', b'u', b'b'];
     let out = maybe_decompress_bin(garbage.clone(), 0x0001, true);
-    assert_eq!(out, garbage, "decompress failure must fall back to raw bytes");
+    assert_eq!(
+        out, garbage,
+        "decompress failure must fall back to raw bytes"
+    );
 }
 
 #[test]

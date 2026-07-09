@@ -314,9 +314,7 @@ fn hwp_to_ir_footnote_emits_inline_ref_matching_definition() {
     let ref_id = blocks
         .iter()
         .find_map(|b| match b {
-            ir::Block::Paragraph { inlines } => {
-                inlines.iter().find_map(|i| i.footnote_ref.clone())
-            }
+            ir::Block::Paragraph { inlines } => inlines.iter().find_map(|i| i.footnote_ref.clone()),
             _ => None,
         })
         .expect("a footnote_ref inline in the body paragraph");
@@ -399,10 +397,16 @@ fn hwp_to_ir_article_heading_splits_marker_from_body() {
     };
     assert_eq!(*level, 2);
     let head_text: String = inlines.iter().map(|i| i.text.as_str()).collect();
-    assert_eq!(head_text, "제2조(정의)", "heading must be only the marker+title");
+    assert_eq!(
+        head_text, "제2조(정의)",
+        "heading must be only the marker+title"
+    );
 
     let ir::Block::Paragraph { inlines: body } = &blocks[1] else {
-        panic!("second block must be the body Paragraph, got {:?}", blocks[1]);
+        panic!(
+            "second block must be the body Paragraph, got {:?}",
+            blocks[1]
+        );
     };
     let body_text: String = body.iter().map(|i| i.text.as_str()).collect();
     assert!(
@@ -430,7 +434,10 @@ fn hwp_to_ir_generic_heading_trims_marker_whitespace() {
     };
     assert_eq!(*level, 1);
     let t: String = inlines.iter().map(|i| i.text.as_str()).collect();
-    assert_eq!(t, "들여쓴 제목", "heading marker whitespace must be trimmed");
+    assert_eq!(
+        t, "들여쓴 제목",
+        "heading marker whitespace must be trimmed"
+    );
 }
 
 #[test]
@@ -441,7 +448,11 @@ fn hwp_to_ir_chapter_divider_stays_single_heading() {
         paragraphs: vec![make_para("제1장 총칙", 0)],
     });
     let doc = hwp_to_ir(&hwp);
-    assert_eq!(doc.sections[0].blocks.len(), 1, "divider = one heading, no body");
+    assert_eq!(
+        doc.sections[0].blocks.len(),
+        1,
+        "divider = one heading, no body"
+    );
     let ir::Block::Heading { level, inlines } = &doc.sections[0].blocks[0] else {
         panic!("expected Heading");
     };
@@ -494,23 +505,36 @@ fn hwp_to_ir_header_footer_controls_hoisted_to_section() {
     let doc = hwp_to_ir(&hwp);
     let section = &doc.sections[0];
 
-    let header = section.header.as_ref().expect("Section.header must be Some");
+    let header = section
+        .header
+        .as_ref()
+        .expect("Section.header must be Some");
     assert!(
-        header.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+        header
+            .iter()
+            .any(|b| matches!(b, ir::Block::Paragraph { inlines }
             if inlines.iter().any(|i| i.text.contains("머리말")))),
         "header must carry the header text; got {header:?}"
     );
 
-    let footer = section.footer.as_ref().expect("Section.footer must be Some");
+    let footer = section
+        .footer
+        .as_ref()
+        .expect("Section.footer must be Some");
     assert!(
-        footer.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+        footer
+            .iter()
+            .any(|b| matches!(b, ir::Block::Paragraph { inlines }
             if inlines.iter().any(|i| i.text.contains("꼬리말")))),
         "footer must carry the footer text; got {footer:?}"
     );
 
     // The header/footer controls must NOT leak into the body blocks.
     assert!(
-        !section.blocks.iter().any(|b| matches!(b, ir::Block::Paragraph { inlines }
+        !section
+            .blocks
+            .iter()
+            .any(|b| matches!(b, ir::Block::Paragraph { inlines }
             if inlines.iter().any(|i| i.text.contains("머리말") || i.text.contains("꼬리말")))),
         "header/footer text must not appear in body blocks"
     );
@@ -641,4 +665,3 @@ fn hwp_to_ir_heading_para_shape_becomes_heading_block() {
         );
     }
 }
-

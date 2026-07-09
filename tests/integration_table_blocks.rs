@@ -53,7 +53,10 @@ fn hwpx_table_with_colspan_renders_html_fallback() {
     assert!(
         table_block.is_some(),
         "expected a Table block; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
 
     // Check that the merged cell carries colspan=2 in the IR.
@@ -109,7 +112,10 @@ fn hwpx_lang_hint_empty_language_produces_code_block_no_tag() {
     assert!(
         code_block.is_some(),
         "expected a CodeBlock; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::CodeBlock { language, code } = code_block.unwrap() else {
         unreachable!()

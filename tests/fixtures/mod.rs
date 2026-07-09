@@ -368,9 +368,7 @@ pub fn styled_run_xml(text: &str) -> String {
 /// parsed `ir::Document`.  Shared across all integration test binaries so
 /// the 3-line helper is not duplicated in each file.
 #[allow(dead_code)]
-pub fn read_fixture(
-    fixture: HwpxFixture,
-) -> (tempfile::TempDir, hwp2md::ir::Document) {
+pub fn read_fixture(fixture: HwpxFixture) -> (tempfile::TempDir, hwp2md::ir::Document) {
     let (dir, path) = fixture.write_to_tempfile();
     let doc = hwp2md::hwpx::read_hwpx(&path).expect("read_hwpx failed");
     (dir, doc)
@@ -427,8 +425,5 @@ pub fn any_block_in_doc(
     doc: &hwp2md::ir::Document,
     pred: impl Fn(&hwp2md::ir::Block) -> bool,
 ) -> bool {
-    doc.sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .any(pred)
+    doc.sections.iter().flat_map(|s| &s.blocks).any(pred)
 }

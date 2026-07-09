@@ -35,7 +35,10 @@ pub(crate) fn parse_hyperlink_url(rec: &Record) -> String {
     let has_valid_scheme = url.find(':').is_some_and(|i| {
         let prefix = &url[..i];
         !prefix.is_empty()
-            && prefix.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && prefix
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
             && prefix
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
@@ -59,7 +62,11 @@ mod tests {
         for ch in &chars {
             data.extend_from_slice(&ch.to_le_bytes());
         }
-        Record { tag_id: HWPTAG_CTRL_HEADER, level: 0, data }
+        Record {
+            tag_id: HWPTAG_CTRL_HEADER,
+            level: 0,
+            data,
+        }
     }
 
     #[test]
@@ -72,7 +79,11 @@ mod tests {
     fn parse_hyperlink_url_record_too_short() {
         // Record with only ctrl_id bytes (< 6 bytes total) — returns empty.
         let data = CTRL_HYPERLINK.to_le_bytes().to_vec();
-        let rec = Record { tag_id: HWPTAG_CTRL_HEADER, level: 0, data };
+        let rec = Record {
+            tag_id: HWPTAG_CTRL_HEADER,
+            level: 0,
+            data,
+        };
         assert_eq!(parse_hyperlink_url(&rec), "");
     }
 

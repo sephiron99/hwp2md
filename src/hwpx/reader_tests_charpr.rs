@@ -554,12 +554,11 @@ fn flush_paragraph_staged_code_block_with_list_para_pr_id_is_plain() {
     );
     match result.unwrap() {
         super::context::StagedBlock::Plain(crate::ir::Block::CodeBlock { code, .. }) => {
-            assert_eq!(code, "fn main() {}", "code block text mismatch: {:?}", code);
+            assert_eq!(code, "fn main() {}", "code block text mismatch: {code:?}");
         }
         other => panic!(
-            "expected StagedBlock::Plain(CodeBlock), got {:?}; \
-             CodeBlock must never be list-staged regardless of paraPrIDRef",
-            other
+            "expected StagedBlock::Plain(CodeBlock), got {other:?}; \
+             CodeBlock must never be list-staged regardless of paraPrIDRef"
         ),
     }
 }

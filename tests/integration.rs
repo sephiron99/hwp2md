@@ -613,7 +613,7 @@ fn pyeon_heading_text_preserved() {
         unreachable!()
     };
     let text: String = inlines.iter().map(|i| i.text.as_str()).collect();
-    assert_eq!(text, "제3편 채권", "heading text mismatch: got {:?}", text);
+    assert_eq!(text, "제3편 채권", "heading text mismatch: got {text:?}");
 }
 
 /// 편 → H1 renders as `# 제N편 …` in Markdown output.
@@ -1339,22 +1339,21 @@ fn ruby_annotation_survives_full_pipeline() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(ruby_xml));
 
     // IR layer: must have a Paragraph with an inline carrying the ruby annotation.
-    let ruby_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.ruby.is_some())
-            } else {
-                None
-            }
-        });
+    let ruby_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.ruby.is_some())
+        } else {
+            None
+        }
+    });
 
     assert!(
         ruby_inline.is_some(),
         "expected at least one inline with ruby annotation; got blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ruby_inline = ruby_inline.unwrap();
     assert_eq!(ruby_inline.text, "漢字", "base text mismatch");
@@ -1470,7 +1469,12 @@ fn ruby_multiple_ruby_in_one_paragraph_both_present() {
         .flat_map(|s| &s.blocks)
         .filter_map(|b| {
             if let ir::Block::Paragraph { inlines } = b {
-                Some(inlines.iter().filter(|i| i.ruby.is_some()).collect::<Vec<_>>())
+                Some(
+                    inlines
+                        .iter()
+                        .filter(|i| i.ruby.is_some())
+                        .collect::<Vec<_>>(),
+                )
             } else {
                 None
             }
@@ -1483,7 +1487,10 @@ fn ruby_multiple_ruby_in_one_paragraph_both_present() {
         2,
         "expected 2 ruby inlines, got {}; blocks: {:?}",
         ruby_inlines.len(),
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(ruby_inlines[0].text, "一");
     assert_eq!(ruby_inlines[0].ruby.as_deref(), Some("いち"));
@@ -1534,7 +1541,9 @@ fn ruby_adjacent_plain_text_and_ruby_both_present() {
     );
     // Ordering: before < ruby < after (prevents swapped output).
     let pos_before = markdown.find("before").expect("'before' in markdown");
-    let pos_ruby = markdown.find("<ruby>振り仮名").expect("ruby tag in markdown");
+    let pos_ruby = markdown
+        .find("<ruby>振り仮名")
+        .expect("ruby tag in markdown");
     let pos_after = markdown.find("after").expect("'after' in markdown");
     assert!(
         pos_before < pos_ruby && pos_ruby < pos_after,
@@ -1663,9 +1672,16 @@ fn hwpx_table_roundtrip_preserves_structure() {
     assert!(
         table_block.is_some(),
         "table must survive HWPX roundtrip; blocks: {:?}",
-        read_back.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        read_back
+            .sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
-    let ir::Block::Table { rows, col_count, .. } = table_block.unwrap() else {
+    let ir::Block::Table {
+        rows, col_count, ..
+    } = table_block.unwrap()
+    else {
         unreachable!()
     };
     assert_eq!(*col_count, 2, "col_count must be 2 after roundtrip");
@@ -1674,22 +1690,45 @@ fn hwpx_table_roundtrip_preserves_structure() {
     // Per-cell position assertions: verify the text appears in the correct
     // structural position, not just anywhere in the document.
     fn cell_text(cell: &ir::TableCell) -> String {
-        cell.blocks.iter().filter_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                Some(inlines.iter().map(|i| i.text.as_str()).collect::<String>())
-            } else { None }
-        }).collect()
+        cell.blocks
+            .iter()
+            .filter_map(|b| {
+                if let ir::Block::Paragraph { inlines } = b {
+                    Some(inlines.iter().map(|i| i.text.as_str()).collect::<String>())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
-    assert_eq!(cell_text(&rows[0].cells[0]), "R0C0", "row0 col0 text mismatch");
-    assert_eq!(cell_text(&rows[0].cells[1]), "R0C1", "row0 col1 text mismatch");
-    assert_eq!(cell_text(&rows[1].cells[0]), "R1C0", "row1 col0 text mismatch");
-    assert_eq!(cell_text(&rows[1].cells[1]), "R1C1", "row1 col1 text mismatch");
+    assert_eq!(
+        cell_text(&rows[0].cells[0]),
+        "R0C0",
+        "row0 col0 text mismatch"
+    );
+    assert_eq!(
+        cell_text(&rows[0].cells[1]),
+        "R0C1",
+        "row0 col1 text mismatch"
+    );
+    assert_eq!(
+        cell_text(&rows[1].cells[0]),
+        "R1C0",
+        "row1 col0 text mismatch"
+    );
+    assert_eq!(
+        cell_text(&rows[1].cells[1]),
+        "R1C1",
+        "row1 col1 text mismatch"
+    );
 
     // Markdown layer: all four cell values appear in output.
     let markdown = md::write_markdown(&read_back, false);
     assert!(
-        markdown.contains("R0C0") && markdown.contains("R0C1")
-            && markdown.contains("R1C0") && markdown.contains("R1C1"),
+        markdown.contains("R0C0")
+            && markdown.contains("R0C1")
+            && markdown.contains("R1C0")
+            && markdown.contains("R1C1"),
         "all cell texts must appear in markdown; got: {markdown:?}"
     );
 }
@@ -1779,7 +1818,12 @@ fn hwpx_heading_paragraph_interleaved_preserves_order_and_levels() {
     let markdown = md::write_markdown(&doc, false);
 
     // All four pieces must be present.
-    for expected in &["# Main Title", "## Sub Section", "Intro text.", "Body content."] {
+    for expected in &[
+        "# Main Title",
+        "## Sub Section",
+        "Intro text.",
+        "Body content.",
+    ] {
         assert!(
             markdown.contains(expected),
             "'{expected}' must appear in markdown; got: {markdown:?}"
@@ -1896,19 +1940,19 @@ fn hwpx_complex_document_mixed_blocks_ordering() {
     );
 
     // Find positions of each expected block.
-    let pos_h1 = blocks.iter().position(|b| {
-        matches!(b, ir::Block::Heading { level: 1, .. })
-    });
+    let pos_h1 = blocks
+        .iter()
+        .position(|b| matches!(b, ir::Block::Heading { level: 1, .. }));
     let pos_intro = blocks.iter().position(|b| {
         matches!(b, ir::Block::Paragraph { inlines } if
             inlines.iter().any(|i| i.text.contains("Introduction")))
     });
-    let pos_h2 = blocks.iter().position(|b| {
-        matches!(b, ir::Block::Heading { level: 2, .. })
-    });
-    let pos_code = blocks.iter().position(|b| {
-        matches!(b, ir::Block::CodeBlock { code, .. } if code.contains("let x"))
-    });
+    let pos_h2 = blocks
+        .iter()
+        .position(|b| matches!(b, ir::Block::Heading { level: 2, .. }));
+    let pos_code = blocks
+        .iter()
+        .position(|b| matches!(b, ir::Block::CodeBlock { code, .. } if code.contains("let x")));
     let pos_body = blocks.iter().position(|b| {
         matches!(b, ir::Block::Paragraph { inlines } if
             inlines.iter().any(|i| i.text.contains("Body text")))
@@ -1935,8 +1979,12 @@ fn hwpx_complex_document_mixed_blocks_ordering() {
 
     // Markdown layer: headings must use correct ATX prefix.
     let markdown = md::write_markdown(&doc, false);
-    let pos_md_h1 = markdown.find("# Main Title").expect("# Main Title in markdown");
-    let pos_md_h2 = markdown.find("## Section One").expect("## Section One in markdown");
+    let pos_md_h1 = markdown
+        .find("# Main Title")
+        .expect("# Main Title in markdown");
+    let pos_md_h2 = markdown
+        .find("## Section One")
+        .expect("## Section One in markdown");
     let pos_md_code = markdown.find("let x = 1;").expect("code in markdown");
     assert!(
         pos_md_h1 < pos_md_h2 && pos_md_h2 < pos_md_code,
@@ -2376,15 +2424,24 @@ fn md_to_hwpx_to_md_roundtrip_preserves_headings() {
     // MD → IR: pre-write assertions.
     let ir_doc = hwp2md::md::parse_markdown(source_md);
     assert!(
-        any_block_in_doc(&ir_doc, |b| matches!(b, ir::Block::Heading { level: 1, .. })),
+        any_block_in_doc(&ir_doc, |b| matches!(
+            b,
+            ir::Block::Heading { level: 1, .. }
+        )),
         "parsed IR must contain H1"
     );
     assert!(
-        any_block_in_doc(&ir_doc, |b| matches!(b, ir::Block::Heading { level: 2, .. })),
+        any_block_in_doc(&ir_doc, |b| matches!(
+            b,
+            ir::Block::Heading { level: 2, .. }
+        )),
         "parsed IR must contain H2"
     );
     assert!(
-        any_block_in_doc(&ir_doc, |b| matches!(b, ir::Block::Heading { level: 3, .. })),
+        any_block_in_doc(&ir_doc, |b| matches!(
+            b,
+            ir::Block::Heading { level: 3, .. }
+        )),
         "parsed IR must contain H3"
     );
 
@@ -2393,15 +2450,24 @@ fn md_to_hwpx_to_md_roundtrip_preserves_headings() {
 
     // Post-hop structural assertions: all three levels must survive.
     assert!(
-        any_block_in_doc(&read_back, |b| matches!(b, ir::Block::Heading { level: 1, .. })),
+        any_block_in_doc(&read_back, |b| matches!(
+            b,
+            ir::Block::Heading { level: 1, .. }
+        )),
         "H1 must survive HWPX roundtrip"
     );
     assert!(
-        any_block_in_doc(&read_back, |b| matches!(b, ir::Block::Heading { level: 2, .. })),
+        any_block_in_doc(&read_back, |b| matches!(
+            b,
+            ir::Block::Heading { level: 2, .. }
+        )),
         "H2 must survive HWPX roundtrip"
     );
     assert!(
-        any_block_in_doc(&read_back, |b| matches!(b, ir::Block::Heading { level: 3, .. })),
+        any_block_in_doc(&read_back, |b| matches!(
+            b,
+            ir::Block::Heading { level: 3, .. }
+        )),
         "H3 must survive HWPX roundtrip"
     );
 

@@ -8,7 +8,8 @@ use crate::hwp::reader::{extract_paragraph_text_with_raw, parse_char_shape_refs}
 use crate::hwp::record::{
     read_utf16le_str, Record, CTRL_COL_BREAK, CTRL_ENDNOTE, CTRL_FOOTNOTE, CTRL_GSHAPE,
     CTRL_HYPERLINK, CTRL_PAGE_BREAK, CTRL_PAGE_FOOTER, CTRL_PAGE_HEADER, CTRL_RUBY, CTRL_TABLE,
-    HWPTAG_CTRL_HEADER, HWPTAG_EQEDIT, HWPTAG_PARA_CHAR_SHAPE, HWPTAG_PARA_HEADER, HWPTAG_PARA_TEXT,
+    HWPTAG_CTRL_HEADER, HWPTAG_EQEDIT, HWPTAG_PARA_CHAR_SHAPE, HWPTAG_PARA_HEADER,
+    HWPTAG_PARA_TEXT,
 };
 
 /// Extract `HwpParagraph`s from records in `[start, end)`, treating them as a

@@ -97,7 +97,10 @@ fn count_lists_in_items(item: &ir::ListItem) -> (usize, usize) {
 #[test]
 fn moel_01_ordered_lists_in_band() {
     let (total, ordered) = list_stats("moel_01_goyang_center");
-    assert!(total > 0, "moel_01: expected at least one list block, got 0");
+    assert!(
+        total > 0,
+        "moel_01: expected at least one list block, got 0"
+    );
     let pct = (ordered as f64) * 100.0 / (total as f64);
     assert!(
         (40.0..=75.0).contains(&pct),
@@ -112,7 +115,10 @@ fn moel_01_ordered_lists_in_band() {
 #[test]
 fn moel_03_ordered_lists_in_band() {
     let (total, ordered) = list_stats("moel_03_livelihood_loan");
-    assert!(total > 0, "moel_03: expected at least one list block, got 0");
+    assert!(
+        total > 0,
+        "moel_03: expected at least one list block, got 0"
+    );
     let pct = (ordered as f64) * 100.0 / (total as f64);
     assert!(
         (45.0..=85.0).contains(&pct),
@@ -128,7 +134,10 @@ fn moel_03_ordered_lists_in_band() {
 #[test]
 fn moel_04_ordered_lists_in_band() {
     let (total, ordered) = list_stats("moel_04_instructor_education");
-    assert!(total > 0, "moel_04: expected at least one list block, got 0");
+    assert!(
+        total > 0,
+        "moel_04: expected at least one list block, got 0"
+    );
     let pct = (ordered as f64) * 100.0 / (total as f64);
     assert!(
         (65.0..=100.0).contains(&pct),
@@ -144,7 +153,10 @@ fn moel_04_ordered_lists_in_band() {
 #[test]
 fn moel_05_ordered_lists_in_band() {
     let (total, ordered) = list_stats("moel_05_quality_management");
-    assert!(total > 0, "moel_05: expected at least one list block, got 0");
+    assert!(
+        total > 0,
+        "moel_05: expected at least one list block, got 0"
+    );
     let pct = (ordered as f64) * 100.0 / (total as f64);
     assert!(
         (75.0..=100.0).contains(&pct),
@@ -172,7 +184,10 @@ fn moel_02_ordered_lists_dominate() {
     let (total, ordered) = list_stats("moel_02_vocational_training");
 
     // Must have at least some lists (sanity — document is non-trivial).
-    assert!(total > 0, "moel_02: expected at least one list block, got 0");
+    assert!(
+        total > 0,
+        "moel_02: expected at least one list block, got 0"
+    );
 
     // Ordered lists must dominate (50–85 % band).
     // Lower bound: a drop below 50 % signals ordered detection regressed.

@@ -37,8 +37,8 @@ fn moel_02_matches_human_verified_golden() {
     };
 
     let hwp_path = Path::new(FIXTURES_DIR).join(format!("{STEM}.hwp"));
-    let doc = hwp::read_hwp(&hwp_path)
-        .unwrap_or_else(|e| panic!("read_hwp failed for {STEM}.hwp: {e}"));
+    let doc =
+        hwp::read_hwp(&hwp_path).unwrap_or_else(|e| panic!("read_hwp failed for {STEM}.hwp: {e}"));
     let actual = md::write_markdown(&doc, false);
 
     if actual != expected {

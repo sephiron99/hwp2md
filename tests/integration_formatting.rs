@@ -26,22 +26,21 @@ fn hwpx_charpr_bold_italic_produces_formatted_inline() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(&body));
 
     // IR layer: inline must have bold=true, italic=true.
-    let bold_italic_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.bold && i.italic)
-            } else {
-                None
-            }
-        });
+    let bold_italic_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.bold && i.italic)
+        } else {
+            None
+        }
+    });
 
     assert!(
         bold_italic_inline.is_some(),
         "expected an inline with bold=true, italic=true; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         bold_italic_inline.unwrap().text,
@@ -67,22 +66,21 @@ fn hwpx_charpr_underline_produces_html_u_tag() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(underline_xml));
 
-    let underline_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.underline)
-            } else {
-                None
-            }
-        });
+    let underline_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.underline)
+        } else {
+            None
+        }
+    });
 
     assert!(
         underline_inline.is_some(),
         "expected an inline with underline=true; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
 
     let markdown = md::write_markdown(&doc, false);
@@ -112,22 +110,21 @@ fn hwpx_charpr_superscript_produces_sup_html() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(sup_xml));
 
-    let sup_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.superscript && !i.subscript)
-            } else {
-                None
-            }
-        });
+    let sup_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.superscript && !i.subscript)
+        } else {
+            None
+        }
+    });
 
     assert!(
         sup_inline.is_some(),
         "expected an inline with superscript=true; got: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let markdown = md::write_markdown(&doc, false);
     assert!(
@@ -147,22 +144,21 @@ fn hwpx_charpr_subscript_produces_sub_html() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(sub_xml));
 
-    let sub_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.subscript && !i.superscript)
-            } else {
-                None
-            }
-        });
+    let sub_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.subscript && !i.superscript)
+        } else {
+            None
+        }
+    });
 
     assert!(
         sub_inline.is_some(),
         "expected an inline with subscript=true; got: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let markdown = md::write_markdown(&doc, false);
     assert!(
@@ -185,22 +181,21 @@ fn hwpx_charpr_strikeout_produces_gfm_strikethrough() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(strike_xml));
 
-    let strike_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.strikethrough)
-            } else {
-                None
-            }
-        });
+    let strike_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.strikethrough)
+        } else {
+            None
+        }
+    });
 
     assert!(
         strike_inline.is_some(),
         "expected inline with strikethrough=true; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(strike_inline.unwrap().text, "Deleted text");
 
@@ -222,22 +217,21 @@ fn hwpx_charpr_non_black_color_produces_span_html() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(color_xml));
 
-    let colored_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.color.is_some())
-            } else {
-                None
-            }
-        });
+    let colored_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.color.is_some())
+        } else {
+            None
+        }
+    });
 
     assert!(
         colored_inline.is_some(),
         "expected inline with color set; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     // Color stored as #RRGGBB uppercase.
     assert_eq!(
@@ -290,17 +284,13 @@ fn hwpx_charpr_bold_underline_combined_produces_wrapped_markdown() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("BoldUnderline"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("BoldUnderline"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected BoldUnderline inline");
     let inline = inline.unwrap();
@@ -327,17 +317,13 @@ fn hwpx_charpr_bold_italic_color_combined_produces_span_with_markers() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("BlueItalicBold"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("BlueItalicBold"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected BlueItalicBold inline");
     let inline = inline.unwrap();
@@ -376,17 +362,13 @@ fn hwpx_charpr_strikethrough_underline_combined() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("StrikeUnderline"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("StrikeUnderline"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected StrikeUnderline inline");
     let inline = inline.unwrap();
@@ -413,17 +395,13 @@ fn hwpx_charpr_bold_strikethrough_combined() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("BoldStrike"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("BoldStrike"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected BoldStrike inline");
     let inline = inline.unwrap();
@@ -449,17 +427,13 @@ fn hwpx_charpr_italic_underline_combined() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("ItalicUnderline"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("ItalicUnderline"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected ItalicUnderline inline");
     let inline = inline.unwrap();

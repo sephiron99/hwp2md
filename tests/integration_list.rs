@@ -47,7 +47,10 @@ fn hwpx_ol_li_produces_ordered_list_block() {
     assert!(
         list_block.is_some(),
         "expected Block::List {{ ordered: true }}; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::List { items, .. } = list_block.unwrap() else {
         unreachable!()
@@ -90,7 +93,10 @@ fn hwpx_ul_li_produces_unordered_list_block() {
     assert!(
         list_block.is_some(),
         "expected Block::List {{ ordered: false }}; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::List { items, .. } = list_block.unwrap() else {
         unreachable!()
@@ -143,7 +149,10 @@ fn hwpx_canonical_ordered_list_flat_para_produces_list_block() {
         list_block.is_some(),
         "expected Block::List {{ ordered: true }} from paraPrIDRef=2 numPrIDRef=1; \
          blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::List { items, .. } = list_block.unwrap() else {
         unreachable!()
@@ -183,7 +192,10 @@ fn hwpx_canonical_unordered_list_flat_para_produces_list_block() {
         list_block.is_some(),
         "expected Block::List {{ ordered: false }} from paraPrIDRef=2 without numPrIDRef; \
          blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::List { items, .. } = list_block.unwrap() else {
         unreachable!()
@@ -227,7 +239,10 @@ fn hwpx_nested_list_depth1_becomes_child_of_parent_item() {
     assert!(
         list_block.is_some(),
         "expected Block::List; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::List { items, .. } = list_block.unwrap() else {
         unreachable!()

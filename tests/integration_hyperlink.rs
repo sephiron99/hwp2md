@@ -29,22 +29,21 @@ fn hwpx_hyperlink_field_begin_end_produces_link_inline() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(hyperlink_xml));
 
-    let link_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.link.is_some())
-            } else {
-                None
-            }
-        });
+    let link_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.link.is_some())
+        } else {
+            None
+        }
+    });
 
     assert!(
         link_inline.is_some(),
         "expected an inline with link; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let link_inline = link_inline.unwrap();
     assert_eq!(link_inline.text, "Click here", "link text mismatch");
@@ -193,17 +192,13 @@ fn hwpx_hyperlink_unsafe_url_drops_link_syntax() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let link_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("click"))
-            } else {
-                None
-            }
-        });
+    let link_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("click"))
+        } else {
+            None
+        }
+    });
 
     assert!(link_inline.is_some(), "expected inline with text 'click'");
     // Assert the IR retains the raw URL — the writer gate is what drops it,
@@ -249,17 +244,13 @@ fn hwpx_hyperlink_bold_text_renders_as_formatted_link() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("BoldLink"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("BoldLink"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected BoldLink inline");
     let inline = inline.unwrap();
@@ -291,17 +282,13 @@ fn hwpx_hyperlink_italic_text_renders_as_formatted_link() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("ItalicLink"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("ItalicLink"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected ItalicLink inline");
     let inline = inline.unwrap();
@@ -334,17 +321,13 @@ fn hwpx_hyperlink_colored_text_renders_as_span_link() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("ColorLink"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("ColorLink"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected ColorLink inline");
     let inline = inline.unwrap();
@@ -362,7 +345,9 @@ fn hwpx_hyperlink_colored_text_renders_as_span_link() {
     // Writer order: color span → link wraps
     let markdown = md::write_markdown(&doc, false);
     assert!(
-        markdown.contains("[<span style=\"color:#FF0000\">ColorLink</span>](https://color.example.com)"),
+        markdown.contains(
+            "[<span style=\"color:#FF0000\">ColorLink</span>](https://color.example.com)"
+        ),
         "color link must render as [<span>text</span>](url); got: {markdown:?}"
     );
 }
@@ -384,17 +369,13 @@ fn hwpx_hyperlink_bold_italic_text_renders_as_bold_italic_link() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.text.contains("BoldItalicLink"))
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.text.contains("BoldItalicLink"))
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected BoldItalicLink inline");
     let inline = inline.unwrap();
@@ -430,17 +411,13 @@ fn hwpx_hyperlink_url_with_closing_paren_uses_angle_bracket_form() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(&xml));
 
-    let inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.link.is_some())
-            } else {
-                None
-            }
-        });
+    let inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.link.is_some())
+        } else {
+            None
+        }
+    });
 
     assert!(inline.is_some(), "expected a link inline");
     assert_eq!(

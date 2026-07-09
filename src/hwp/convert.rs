@@ -1,8 +1,8 @@
 use crate::hwp::eqedit::eqedit_to_latex;
 // Re-export so convert_tests_detect can reach it via `use super::*`.
 pub(crate) use crate::hwp::heading_style::detect_korean_regulation_heading;
-use crate::hwp::heading_style::regulation_heading_split;
 use crate::hwp::heading_style::parse_heading_style;
+use crate::hwp::heading_style::regulation_heading_split;
 use crate::hwp::model::{DocInfo, HwpControl, HwpDocument, HwpParagraph, HwpTableCell};
 use crate::ir::{self, InlineFormat};
 use crate::url_util::is_safe_url_scheme;

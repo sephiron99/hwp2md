@@ -40,12 +40,18 @@ fn hwpx_equation_element_produces_math_block_and_latex_markdown() {
     assert!(
         math_block.is_some(),
         "expected Block::Math from <hp:equation>; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::Math { display, tex } = math_block.unwrap() else {
         unreachable!()
     };
-    assert!(*display, "HWPX equation must produce display=true Math block");
+    assert!(
+        *display,
+        "HWPX equation must produce display=true Math block"
+    );
     assert!(
         tex.contains("x") && tex.contains("y"),
         "LaTeX output must contain 'x' and 'y'; got: {tex:?}"
@@ -155,7 +161,10 @@ fn hwpx_equation_eqedit_syntax_stored_verbatim_not_converted() {
     assert!(
         math_block.is_some(),
         "expected Math block; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let ir::Block::Math { tex, .. } = math_block.unwrap() else {
         unreachable!()

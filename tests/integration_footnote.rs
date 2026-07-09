@@ -31,26 +31,29 @@ fn hwpx_footnote_fn_element_produces_footnote_block_and_markdown() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(footnote_xml));
 
     // IR layer: must contain a Footnote block.
-    let footnote = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Footnote { id, content } = b {
-                Some((id.as_str(), content.as_slice()))
-            } else {
-                None
-            }
-        });
+    let footnote = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Footnote { id, content } = b {
+            Some((id.as_str(), content.as_slice()))
+        } else {
+            None
+        }
+    });
 
     assert!(
         footnote.is_some(),
         "expected a Footnote block; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     let (id, content) = footnote.unwrap();
     assert_eq!(id, "1", "footnote id mismatch");
-    assert_eq!(content.len(), 1, "footnote must have exactly one content block");
+    assert_eq!(
+        content.len(),
+        1,
+        "footnote must have exactly one content block"
+    );
 
     // Body paragraph must survive as a separate block alongside the Footnote block.
     let total_blocks: usize = doc.sections.iter().map(|s| s.blocks.len()).sum();
@@ -59,7 +62,10 @@ fn hwpx_footnote_fn_element_produces_footnote_block_and_markdown() {
         2,
         "section must contain body Paragraph + Footnote (2 blocks total); \
          blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
 
     // Markdown layer: must render as [^1]: content
@@ -86,23 +92,22 @@ fn hwpx_endnote_en_element_produces_footnote_block_and_markdown() {
 
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(endnote_xml));
 
-    let footnote = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Footnote { id, .. } = b {
-                Some(id.as_str())
-            } else {
-                None
-            }
-        });
+    let footnote = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Footnote { id, .. } = b {
+            Some(id.as_str())
+        } else {
+            None
+        }
+    });
 
     assert_eq!(
         footnote,
         Some("2"),
         "expected Footnote block with id='2'; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
 
     let markdown = md::write_markdown(&doc, false);
@@ -135,22 +140,21 @@ fn hwpx_note_ref_inline_produces_footnote_ref_in_markdown() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(note_ref_xml));
 
     // IR layer: the paragraph must have an inline with footnote_ref.
-    let ref_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.footnote_ref.is_some())
-            } else {
-                None
-            }
-        });
+    let ref_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.footnote_ref.is_some())
+        } else {
+            None
+        }
+    });
 
     assert!(
         ref_inline.is_some(),
         "expected an inline with footnote_ref; blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         ref_inline.unwrap().footnote_ref.as_deref(),
@@ -199,22 +203,21 @@ fn hwpx_orphan_note_ref_body_rendered_without_definition() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(orphan_ref_xml));
 
     // IR layer: must still produce the footnote_ref inline.
-    let ref_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.footnote_ref.is_some())
-            } else {
-                None
-            }
-        });
+    let ref_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.footnote_ref.is_some())
+        } else {
+            None
+        }
+    });
     assert!(
         ref_inline.is_some(),
         "orphan noteRef must still produce a footnote_ref inline; \
          blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(ref_inline.unwrap().footnote_ref.as_deref(), Some("99"));
 
@@ -254,22 +257,21 @@ fn hwpx_ctrl_fn_idref_produces_footnote_ref_inline() {
     let (_dir, doc) = read_fixture(HwpxFixture::new().section(ctrl_fn_xml));
 
     // IR: footnote_ref inline must exist with id="1".
-    let ref_inline = doc
-        .sections
-        .iter()
-        .flat_map(|s| &s.blocks)
-        .find_map(|b| {
-            if let ir::Block::Paragraph { inlines } = b {
-                inlines.iter().find(|i| i.footnote_ref.is_some())
-            } else {
-                None
-            }
-        });
+    let ref_inline = doc.sections.iter().flat_map(|s| &s.blocks).find_map(|b| {
+        if let ir::Block::Paragraph { inlines } = b {
+            inlines.iter().find(|i| i.footnote_ref.is_some())
+        } else {
+            None
+        }
+    });
     assert!(
         ref_inline.is_some(),
         "<hp:ctrl id='fn' idRef='1'/> must produce footnote_ref inline; \
          blocks: {:?}",
-        doc.sections.iter().flat_map(|s| &s.blocks).collect::<Vec<_>>()
+        doc.sections
+            .iter()
+            .flat_map(|s| &s.blocks)
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         ref_inline.unwrap().footnote_ref.as_deref(),

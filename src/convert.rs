@@ -17,12 +17,37 @@ use crate::hwpx;
 use crate::ir;
 use crate::md;
 
+/// Output format for tables containing merged cells (`colspan`/`rowspan` > 1).
+///
+/// [`TableFormat::Html`] (the default) preserves current behaviour: plain GFM
+/// pipe tables when no cell is merged, falling back to an HTML `<table>` when
+/// any cell spans multiple columns/rows. [`TableFormat::Grid`] emits
+/// Pandoc-compatible grid table syntax instead of HTML.
+/// [`TableFormat::Repeat`] avoids both HTML and grid syntax by duplicating a
+/// merged cell's content into every logical grid position it spans,
+/// producing a plain GFM pipe table with no spans.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
+pub enum TableFormat {
+    /// HTML `<table>` fallback for merged cells (current/default behaviour).
+    #[default]
+    Html,
+    /// Pandoc-compatible grid table syntax (`+---+---+`).
+    Grid,
+    /// Duplicate merged-cell content into each logical cell (plain GFM pipe table).
+    Repeat,
+}
+
 /// Convert an HWP or HWPX document to Markdown.
 ///
 /// Reads `input` (`.hwp` or `.hwpx`), converts it to Markdown, and writes the
 /// result to `output` (or stdout when `None`).  Embedded images are extracted
 /// to `assets_dir` when provided.  Set `frontmatter` to `true` to prepend a
 /// YAML front-matter block with document metadata.
+///
+/// Tables with merged cells (`colspan`/`rowspan` > 1) always use the HTML
+/// `<table>` fallback ([`TableFormat::Html`]); use
+/// [`to_markdown_with_table_format`] or [`ConvertOptions`] to select
+/// [`TableFormat::Grid`] or [`TableFormat::Repeat`] instead.
 ///
 /// # Errors
 ///
@@ -33,6 +58,33 @@ pub fn to_markdown(
     output: Option<&Path>,
     assets_dir: Option<&Path>,
     frontmatter: bool,
+) -> Result<(), Hwp2MdError> {
+    to_markdown_with_table_format(
+        input,
+        output,
+        assets_dir,
+        frontmatter,
+        TableFormat::default(),
+    )
+}
+
+/// Convert an HWP or HWPX document to Markdown, choosing how tables with
+/// merged cells are rendered via `table_format`.
+///
+/// See [`to_markdown`] for the remaining parameters; [`to_markdown`] is a
+/// thin wrapper around this function using [`TableFormat::default`] (`Html`),
+/// which preserves the exact output of every existing caller.
+///
+/// # Errors
+///
+/// Returns [`Hwp2MdError::UnsupportedFormat`] for unknown extensions and
+/// propagates I/O or parse errors from the underlying readers.
+pub fn to_markdown_with_table_format(
+    input: &Path,
+    output: Option<&Path>,
+    assets_dir: Option<&Path>,
+    frontmatter: bool,
+    table_format: TableFormat,
 ) -> Result<(), Hwp2MdError> {
     let ext = input
         .extension()
@@ -60,7 +112,7 @@ pub fn to_markdown(
         write_assets(&doc, dir)?;
     }
 
-    let markdown = md::write_markdown(&doc, frontmatter);
+    let markdown = md::write_markdown_with_table_format(&doc, frontmatter, table_format);
 
     match output {
         Some(path) => {
@@ -480,6 +532,7 @@ fn write_assets(doc: &ir::Document, dir: &Path) -> Result<(), Hwp2MdError> {
 ///     .expect("conversion failed");
 /// ```
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct ConvertOptions<'a> {
     input: &'a Path,
     output: &'a Path,
@@ -487,6 +540,7 @@ pub struct ConvertOptions<'a> {
     frontmatter: bool,
     style: Option<&'a Path>,
     force: bool,
+    table_format: TableFormat,
 }
 
 impl<'a> ConvertOptions<'a> {
@@ -510,6 +564,7 @@ impl<'a> ConvertOptions<'a> {
             frontmatter: false,
             style: None,
             force: false,
+            table_format: TableFormat::default(),
         }
     }
 
@@ -539,6 +594,17 @@ impl<'a> ConvertOptions<'a> {
     #[must_use]
     pub fn style(mut self, path: &'a Path) -> Self {
         self.style = Some(path);
+        self
+    }
+
+    /// Set the table rendering format for merged cells (`colspan`/`rowspan`
+    /// > 1).
+    ///
+    /// Only used when converting HWP/HWPX → Markdown.  Ignored for the
+    /// reverse direction.  Defaults to [`TableFormat::Html`].
+    #[must_use]
+    pub fn table_format(mut self, format: TableFormat) -> Self {
+        self.table_format = format;
         self
     }
 
@@ -584,12 +650,15 @@ impl<'a> ConvertOptions<'a> {
             .to_lowercase();
 
         match (classify_format(&in_ext), classify_format(&out_ext)) {
-            (FormatKind::Hwp | FormatKind::Hwpx, FormatKind::Markdown) => to_markdown(
-                self.input,
-                Some(self.output),
-                self.assets_dir,
-                self.frontmatter,
-            ),
+            (FormatKind::Hwp | FormatKind::Hwpx, FormatKind::Markdown) => {
+                to_markdown_with_table_format(
+                    self.input,
+                    Some(self.output),
+                    self.assets_dir,
+                    self.frontmatter,
+                    self.table_format,
+                )
+            }
             (FormatKind::Markdown, FormatKind::Hwpx) => {
                 to_hwpx(self.input, Some(self.output), self.style)
             }

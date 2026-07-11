@@ -1,6 +1,6 @@
 # hwp2md — Progress
 
-## 현재 상태: v0.5.0 Sprint 98 완료 (이미지 링크 깨짐 CRITICAL 수정 — 5인 전문가 리뷰 후속)
+## 현재 상태: v0.5.0 Sprint 102 완료 (v0.6.0 스펙: 구성 가능한 표 포맷 TableFormat Html/Grid/Repeat)
 
 ### 완료
 
@@ -751,6 +751,58 @@ fn collect_inline_text(inlines: Vec<ir::Inline>) -> String {
   - 비재현: `20026년` moel_02에서 0건 / 헤딩 앞공백4+ 0건 (정직 보고)
 - 다음 후보(R5 범위 밖, 각 별도 슬라이스): F-D1/D2 조 헤딩 head/body 분리, F-D3 이중번호 정책, F-D4 마커 공백 정규화.
 - 검증: 스캐폴드 default=ignored / --ignored=skip, clippy clean.
+
+---
+
+## Sprint 102 — 2026-07-11 (v0.6.0: 구성 가능한 표 포맷 — TableFormat)
+**주제**: 사전 크리스탈화된 deep-interview 스펙 실행 — Html/Grid/Repeat 표 렌더링 옵션, colspan/rowspan 병합 셀을 위한 Pandoc grid-table 지원
+
+### 변경사항
+| 파일 | 변경 내용 |
+|------|----------|
+| `src/convert.rs` | `TableFormat` enum(`Html`/`Grid`/`Repeat`, `#[derive(clap::ValueEnum)]`) 신설, `ConvertOptions`에 `#[non_exhaustive]` + `table_format` 필드/빌더 메서드 추가. `to_markdown`(4-인자, 기존 시그니처 불변) → 신규 `to_markdown_with_table_format`(5-인자)로 위임(Html 기본값), 기존 40개+ 호출부 영향 없음. |
+| `src/main.rs` | `to-md` 서브커맨드에 `--table-format html\|grid\|repeat` 플래그(기본 html) 추가. |
+| `src/md/mod.rs` | `write_markdown_with_table_format` re-export 추가. |
+| `src/md/writer.rs` | `write_table`을 `TableFormat` 매치로 재구성: `write_plain_table`(기존 GFM pipe 로직 추출), `write_html_table`(불변), 신규 `write_grid_table`/`write_repeat_table` + 공유 `build_occupancy_grid` 헬퍼(`OccCell` 구조체). `write_markdown`(2-인자)은 `write_markdown_with_table_format(.., Html)`로 위임 — 기존 호출부 전원 불변. |
+| `src/md/writer_tests_table_format.rs` | NEW — Html/Grid/Repeat 3모드 × 3x2 colspan-2 IR 픽스처 단위 테스트 5건(rowspan-only 회귀 포함). |
+| `tests/cli_to_md.rs` | NEW — 실 바이너리 subprocess 호출 CLI 통합 테스트 4건(`--table-format` 플래그 문서화, grid/repeat 실 픽스처 수용, html 기본값=명시 html 바이트동일). |
+
+### Grid 모드 구현 노트
+- Pandoc 공식 매뉴얼(`pandoc.org/MANUAL.html#extension-grid_tables`)의 실제 문서화 예제로 문법 검증(추측 아님) — colspan 경계 병합, rowspan 연속선분 blank 처리 규칙 모두 실제 예제로 재현.
+- 적대적 레드팀 8케이스(빈 테이블/colspan overflow/전체 행 span/colspan+rowspan 조합/rowspan 단독/빈 셀/colspan=0) 중 2건(colspan+rowspan 조합, rowspan 단독)에서 **실 버그 발견**: rowspan 연속 경계선이 공백 대신 대시로 렌더링됨 — Pandoc 매뉴얼의 "Property"/"Earth" rowspan 예제와 대조해 검증 후 수정, 영구 회귀 테스트로 고정(`table_format_grid_rowspan_continuation_border_is_blank_not_dashed`).
+
+### 검증
+- **1330 lib tests + 27 integration suites, 0 failures** (기존 1325 + TableFormat 5 유닛 테스트 순증, CLI 통합 4건 별도).
+- Clippy `--all-targets -D warnings`: clean. `cargo fmt --check`: clean.
+- 실 CLI 바이너리로 `tests/fixtures/real/moel_01_goyang_center.hwp` 전 포맷 왕복 확인, html 모드 = 기존 커밋된 골든과 byte-identical(무회귀 확인).
+
+### 제약 / 후속
+- 스펙 자체의 브라운필드 스캔 결론(라운드 3): 5개 실 픽스처 전부 순수 법령 텍스트, 복합 표 無 — e2e 실 픽스처 검증은 grid/repeat 모드의 "무회귀"만 증명(합성 IR 픽스처가 3모드 자체 정확성의 1차 증거).
+- 관련 실행: `specs/deep-interview-hwp2md-v060-table-format.md`(session `019f0779-85ac-7000-a287-b07c05981f1d`) → ralplan 합의(pending-approval) → ultragoal G001.
+
+---
+
+## Sprint 101 — 2026-07-01 (NG3: EQEDIT 오프셋 버그 + 목록 시작번호 보존)
+**주제**: G001/G002 pre-verification에서 발견된 실버그 2건 수정 — `$<NUL>$` 회귀 + 목록 재번호
+
+### NG3 — HWPTAG_EQEDIT 스크립트 오프셋 버그 ✅
+- 문제: `eqedit_to_latex`가 UINT32 attribute word(4바이트)를 건너뛰지 않고 offset 2에서 스크립트를 읽어, 빈 스크립트(len==0)일 때 attribute 상위 2바이트를 WCHAR 길이 프리픽스로 오독 → 단일 NUL 코드유닛이 `Block::Math { tex: "\0" }`로 leak되어 Markdown에 `$<NUL>$`(제어바이트, 육안상 `$$`로 보임)로 출력.
+- 수정: `read_utf16le_str(&rec.data, 4)`로 오프셋 정정 + dispatcher/convert.rs 이중 방어(제어문자·공백뿐인 스크립트는 Math 블록 자체를 생성하지 않음).
+- 골든: moel_02_vocational_training 재생성(별표 2 영역 `$<NUL>$` 라인 제거).
+- 테스트: `eqedit_real_script_read_at_offset_four`, `eqedit_nul_only_script_is_dropped`, `eqedit_adversarial_*`(5건), `control_to_block_equation_control_only_script_returns_none`, `real_fixtures_no_control_bytes`.
+
+### NG3-list (G002) — 목록 번호 연속성 보존 ✅
+- 문제: `group_list_paragraphs`가 모든 `Block::List.start`를 1로 하드코딩 + `strip_leading_list_marker`가 리터럴 서수를 제거 → 1이 아닌 번호로 시작/재개하는 목록(예: 7-1 삽입 후 8·9·10·11, moel_05 서약 2~7)이 1부터 재번호.
+- 근본 원인: 원본에 `HWPTAG_NUMBERING` 레코드가 전무(전부 free-typed 마커) — raw-record probe로 확인.
+- 수정: `leading_ordinal`로 첫 항목 서수를 stripping 전에 포착해 `StagedBlock::ListPara.start` → `Block::List.start`로 전달(writer는 이미 start 존중). 서수 문법 3중복 제거를 위해 `parse_ordinal_marker` 단일화.
+- 골든: moel_01/02/03/05 재생성(마커 번호만, 원본 대조, behavior-preserving byte-identical 확인).
+- 테스트: `leading_ordinal_*`, `hwp_to_ir_list_resuming_after_interruption_keeps_source_numbering` 외 adversarial 5건.
+
+### 검증
+- **1325 lib tests + 전체 integration 통과**, clippy `-D warnings` clean.
+
+### 관련 커밋
+- `6cd653a` fix(hwp): EQEDIT 스크립트 오프셋 수정 + 목록 시작번호 보존 (G001/G002, Sprint 101)
 
 ---
 

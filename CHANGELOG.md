@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **v0.6.0 spec / Sprint 102**: Configurable table output format — `TableFormat`
+  enum (`Html`/`Grid`/`Repeat`) on `ConvertOptions` (`#[non_exhaustive]` +
+  `table_format` builder) and a `--table-format html|grid|repeat` flag on the
+  `to-md` subcommand (default `html`, fully backward-compatible — public
+  `to_markdown`/`write_markdown` signatures unchanged). `Grid` emits
+  Pandoc-compatible grid table syntax (`+---+---+`, verified against Pandoc's
+  own documented examples) for cells with `colspan`/`rowspan` > 1 instead of
+  the HTML `<table>` fallback; `Repeat` duplicates a merged cell's content
+  into every logical grid position it spans. 9 new tests (5 unit +
+  4 CLI subprocess integration tests against a real fixture).
+
 ## [0.5.0] - 2026-05-19
 
 ### Added

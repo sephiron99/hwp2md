@@ -29,6 +29,9 @@ enum Commands {
         /// Include frontmatter metadata
         #[arg(long)]
         frontmatter: bool,
+        /// Table rendering format for merged cells (colspan/rowspan > 1)
+        #[arg(long, value_enum, default_value = "html")]
+        table_format: hwp2md::convert::TableFormat,
     },
     /// Convert Markdown to HWPX
     ToHwpx {
@@ -107,12 +110,14 @@ fn main() -> Result<()> {
             output,
             assets_dir,
             frontmatter,
+            table_format,
         } => {
-            hwp2md::convert::to_markdown(
+            hwp2md::convert::to_markdown_with_table_format(
                 &input,
                 output.as_deref(),
                 assets_dir.as_deref(),
                 frontmatter,
+                table_format,
             )?;
         }
         Commands::ToHwpx {

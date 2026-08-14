@@ -307,6 +307,21 @@ R5/G001·G002 pre-verification에서 로그된 NG3(별표 2 dropped-table + null
 
 - **TableFormat**: ✅ `Html`/`Grid`/`Repeat` enum(`src/convert.rs`) + `ConvertOptions` `#[non_exhaustive]`/`table_format` 빌더 + `--table-format` CLI 플래그(`to-md`, 기본 html). 공개 `to_markdown`/`write_markdown` 시그니처 불변(Html 기본값으로 위임) — 기존 40개+ 호출부 무영향. Grid 모드는 Pandoc 공식 매뉴얼 실 예제로 문법 검증(colspan 경계 병합 + rowspan 연속선분 blank 처리). 적대적 레드팀 8케이스 중 2건에서 rowspan 경계선 렌더링 실버그 발견·수정·영구 회귀 테스트 고정. 9 신규 테스트(유닛 5 + 실 바이너리 subprocess CLI 통합 4). 1330 lib + 27 integration suites 통과, clippy clean, fmt clean.
 
+## Sprint 103 계획 (미착수 — 사용자 승인 대기)
+
+**착수 배경**: `to-hwpx` 실사용 첫 사례에서 실제 한컴오피스가 산출물을 "손상됨"으로 거부하는 결함 발견(`hwp2md check`는 OK 반환 — 자기참조 검증의 한계가 실사용에서 처음 드러남). Issue [#1](https://github.com/hephaex/hwp2md/issues/1) 등록. R5("사람 검증 골든 준비")가 "사용자 위임"으로 막혀 있던 근본 원인과 동일 갭.
+
+**Domain Charter 확인**: hwp2md는 HWP/HWPX↔Markdown 변환기다. 이 스프린트는 변환 정확성(to-hwpx 산출물의 실제 유효성)에 관한 것으로 core 범위 안.
+
+- **P1 (HIGH)**: 실제 한컴 저작 hwpx 참조 샘플 확보 + 구조적 diff — 공공기관 배포 hwpx 서식 파일 수집(라이선스 문제 없는 공개 배포본), hwp2md 최소 출력물과 `header.xml`(refList 하위요소 순서·필수 속성) / `section0.xml`(`hp:p`/`hp:run` 필수 속성, `hp:linesegarray` 존재 여부) 단위로 diff. 한컴 라이선스 불필요, 가장 저비용.
+- **P2 (HIGH)**: P1 diff에서 확인된 구조적 누락/오류 수정 — P1 결과에 따라 구체 항목 결정(사전 확정 안 함, diff 결과가 실제 결함 목록).
+- **P3 (MEDIUM)**: OWPML(KS X 6101) XSD 확보 가능 여부 조사 — 가능하면 `to-hwpx` 출력에 스키마 검증 추가(자기참조 파서 재검증이 아닌 독립 스키마 검증). 불가능하면 이 항목은 P4로 강등.
+- **P4 (MEDIUM)**: 제3자 hwpx 리더 교차검증 가능성 조사 — `hwpforge`/`hwpConverter` 등 기존 참조 라이브러리로 hwp2md 출력물을 읽어보는 스모크테스트가 CI에 편입 가능한지 검토.
+- **P5 (즉시 완화책, LOW 난이도·우선 착수 가능)**: `to-hwpx` 실행 시 CLI stderr 경고 추가("이 출력은 실제 한컴오피스 검증 없이 생성되었습니다, 배포 전 확인 권장") + README 명시. P1~P4 완료 전까지 사용자가 이번처럼 뒤늦게 발견하는 것을 방지하는 최소 조치 — 근본 해결과 별개로 먼저 착수 가능.
+- **R (여력 되면, 별도 승인)**: 한컴오피스 체험판 확보해 1회성 수동 검증 파이프라인 구축 — R5를 막던 "한컴 렌더 대조 불가"를 근본적으로 깨는 유일한 방법이나 별도 트랙.
+
+**Demo Gate**: P1~P2는 diff 결과 + 수정 후 재diff(구조 불일치 0건)를 커밋에 포함. P5는 실행 로그(경고 문구 출력 확인)로 증명.
+
 ## 라이선스
 
 GPL-3.0-only

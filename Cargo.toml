@@ -51,6 +51,7 @@ comrak = "0.34"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

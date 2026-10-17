@@ -462,3 +462,71 @@ fn batch_recursive_in_place() {
         "sub/doc.md must be created next to its source"
     );
 }
+
+// ---------------------------------------------------------------------------
+// batch with doc.hwp + doc.hwpx in one dir → only one writes doc.md
+// ---------------------------------------------------------------------------
+
+#[test]
+fn batch_same_stem_converted_once() {
+    let dir = tempdir().expect("tempdir");
+    make_hwpx(&dir.path().join("doc.hwpx"));
+    // Sorted order is doc.HWPX < doc.hwp < doc.hwpx, so the valid doc.HWPX
+    // wins and the invalid doc.hwp must be skipped without being parsed.
+    std::fs::copy(dir.path().join("doc.hwpx"), dir.path().join("doc.HWPX")).expect("copy");
+    std::fs::write(dir.path().join("doc.hwp"), b"not really hwp").expect("write hwp");
+
+    let result = cargo_bin()
+        .args(["batch", dir.path().to_str().unwrap()])
+        .output()
+        .expect("execute batch");
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("another input already maps to"),
+        "expected duplicate-output skip; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("0 failed"),
+        "duplicate must be skipped, not attempted; stdout: {stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// batch converts many files in parallel → all outputs present
+// ---------------------------------------------------------------------------
+
+#[test]
+fn batch_parallel_many_files() {
+    let dir = tempdir().expect("tempdir");
+    let input = dir.path().join("in");
+    let src = dir.path().join("seed.hwpx");
+    make_hwpx(&src);
+    for i in 0..16 {
+        let sub = input.join(format!("d{}", i % 4));
+        std::fs::create_dir_all(&sub).expect("mkdir");
+        std::fs::copy(&src, sub.join(format!("f{i}.hwpx"))).expect("copy");
+    }
+    let out_dir = dir.path().join("out");
+
+    let result = cargo_bin()
+        .args([
+            "batch",
+            input.to_str().unwrap(),
+            "-o",
+            out_dir.to_str().unwrap(),
+        ])
+        .output()
+        .expect("execute batch");
+    assert!(
+        result.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    for i in 0..16 {
+        let md = out_dir.join(format!("d{}", i % 4)).join(format!("f{i}.md"));
+        assert!(md.exists(), "{} missing", md.display());
+    }
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(stdout.contains("16 converted"), "stdout: {stdout}");
+}

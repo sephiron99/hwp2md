@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use rayon::prelude::*;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -176,8 +177,8 @@ fn main() -> Result<()> {
 
 /// Batch-convert all `.hwp` / `.hwpx` files under `input_dir` to Markdown.
 ///
-/// Subdirectories are walked recursively and the directory structure is
-/// mirrored in `output_dir` (or `input_dir` when not supplied): for example
+/// Files are converted in parallel with rayon.  Subdirectories are walked
+/// recursively and the directory structure is mirrored in `output_dir` (or `input_dir` when not supplied): for example
 /// `input/a/b/doc.hwp` becomes `output/a/b/doc.md`.  When `assets_dir` is
 /// given, images go to `assets_dir/a/b/doc/`.  Hidden entries and symlinks
 /// (files and directories) are skipped.
@@ -211,12 +212,15 @@ fn run_batch(
     collect_hwp_files(input_dir, &mut inputs)?;
     inputs.sort();
 
-    let mut converted: usize = 0;
-    let mut skipped: usize = 0;
+    // Resolve output paths up front (sequentially) so that two inputs mapping
+    // to the same output — e.g. `doc.hwp` and `doc.hwpx` in one directory —
+    // are never written concurrently.  The first one in sorted order wins.
+    let mut jobs = Vec::with_capacity(inputs.len());
+    let mut seen_outputs = std::collections::HashSet::new();
     let mut failed: usize = 0;
-
+    let mut skipped: usize = 0;
     for path in inputs {
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_owned) else {
             tracing::warn!("Skipping file with non-UTF-8 stem: {:?}", path);
             failed += 1;
             continue;
@@ -226,44 +230,66 @@ fn run_batch(
         let rel_dir = path
             .parent()
             .and_then(|p| p.strip_prefix(input_dir).ok())
-            .unwrap_or_else(|| std::path::Path::new(""));
+            .unwrap_or_else(|| std::path::Path::new(""))
+            .to_path_buf();
+        let out_path = out_dir.join(&rel_dir).join(format!("{stem}.md"));
 
-        let target_dir = out_dir.join(rel_dir);
-        let out_path = target_dir.join(format!("{stem}.md"));
-
-        if !force && out_path.exists() {
+        if !seen_outputs.insert(out_path.clone()) {
             eprintln!(
-                "Skipping {:?}: output already exists (use --force to overwrite)",
-                path.display()
+                "Skipping {}: another input already maps to {}",
+                path.display(),
+                out_path.display()
             );
             skipped += 1;
             continue;
         }
-
-        if let Err(e) = std::fs::create_dir_all(&target_dir) {
-            eprintln!("Error creating {}: {e}", target_dir.display());
-            failed += 1;
-            continue;
-        }
-
-        let file_assets_dir = assets_dir.map(|base| base.join(rel_dir).join(stem));
-
-        match hwp2md::convert::to_markdown(
-            &path,
-            Some(&out_path),
-            file_assets_dir.as_deref(),
-            frontmatter,
-        ) {
-            Ok(()) => {
-                println!("Converted: {} -> {}", path.display(), out_path.display());
-                converted += 1;
-            }
-            Err(e) => {
-                eprintln!("Error converting {}: {e}", path.display());
-                failed += 1;
-            }
-        }
+        jobs.push((path, rel_dir, stem, out_path));
     }
+
+    let outcomes: Vec<Outcome> = jobs
+        .par_iter()
+        .map(|(path, rel_dir, stem, out_path)| {
+            if !force && out_path.exists() {
+                eprintln!(
+                    "Skipping {:?}: output already exists (use --force to overwrite)",
+                    path.display()
+                );
+                return Outcome::Skipped;
+            }
+
+            if let Some(target_dir) = out_path.parent() {
+                if let Err(e) = std::fs::create_dir_all(target_dir) {
+                    eprintln!("Error creating {}: {e}", target_dir.display());
+                    return Outcome::Failed;
+                }
+            }
+
+            let file_assets_dir = assets_dir.map(|base| base.join(rel_dir).join(stem));
+
+            match hwp2md::convert::to_markdown(
+                path,
+                Some(out_path),
+                file_assets_dir.as_deref(),
+                frontmatter,
+            ) {
+                Ok(()) => {
+                    println!("Converted: {} -> {}", path.display(), out_path.display());
+                    Outcome::Converted
+                }
+                Err(e) => {
+                    eprintln!("Error converting {}: {e}", path.display());
+                    Outcome::Failed
+                }
+            }
+        })
+        .collect();
+
+    let converted = outcomes
+        .iter()
+        .filter(|o| **o == Outcome::Converted)
+        .count();
+    skipped += outcomes.iter().filter(|o| **o == Outcome::Skipped).count();
+    failed += outcomes.iter().filter(|o| **o == Outcome::Failed).count();
 
     println!("Batch complete: {converted} converted, {skipped} skipped, {failed} failed");
 
@@ -272,6 +298,14 @@ fn run_batch(
     }
 
     Ok(())
+}
+
+/// Result of converting one file in [`run_batch`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Converted,
+    Skipped,
+    Failed,
 }
 
 /// Recursively collect `.hwp` / `.hwpx` files under `dir`, skipping hidden

@@ -101,7 +101,7 @@ hwp2md convert report.hwpx report.md --force
 ### Batch convert a directory
 
 ```bash
-# Convert all HWP/HWPX files in a directory
+# Convert all HWP/HWPX files in a directory (recursively, mirroring subdirectories)
 hwp2md batch ./reports/ --output-dir converted/
 
 # Extract images into per-file subdirectories

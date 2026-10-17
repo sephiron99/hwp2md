@@ -78,9 +78,10 @@ enum Commands {
         #[arg(long)]
         style: Option<PathBuf>,
     },
-    /// Batch-convert all HWP/HWPX files in a directory to Markdown
+    /// Batch-convert all HWP/HWPX files in a directory (recursively) to Markdown,
+    /// mirroring the subdirectory structure in the output directory
     Batch {
-        /// Input directory containing .hwp/.hwpx files
+        /// Input directory containing .hwp/.hwpx files (searched recursively)
         input_dir: PathBuf,
         /// Output directory for .md files (default: same as input)
         #[arg(short, long)]
@@ -173,14 +174,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Batch-convert all `.hwp` / `.hwpx` files in `input_dir` to Markdown.
+/// Batch-convert all `.hwp` / `.hwpx` files under `input_dir` to Markdown.
 ///
-/// Each converted file is placed in `output_dir` (or `input_dir` when not
-/// supplied) with the same stem and a `.md` extension.  Conversion errors for
-/// individual files are logged and counted; the function returns `Ok(())` as
-/// long as at least one file succeeded (or zero files were found).  It only
-/// returns an `Err` when the input directory cannot be read or all files
-/// failed.
+/// Subdirectories are walked recursively and the directory structure is
+/// mirrored in `output_dir` (or `input_dir` when not supplied): for example
+/// `input/a/b/doc.hwp` becomes `output/a/b/doc.md`.  When `assets_dir` is
+/// given, images go to `assets_dir/a/b/doc/`.  Hidden entries and symlinks
+/// (files and directories) are skipped.
+///
+/// Conversion errors for individual files are logged and counted; the
+/// function returns `Ok(())` as long as at least one file succeeded (or zero
+/// files were found).  It only returns an `Err` when the input directory
+/// cannot be read or all files failed.
 fn run_batch(
     input_dir: &std::path::Path,
     output_dir: Option<&std::path::Path>,
@@ -200,50 +205,31 @@ fn run_batch(
         std::fs::create_dir_all(out_dir)?;
     }
 
-    let entries = std::fs::read_dir(input_dir)?;
+    // Collect every input first so files written during conversion (e.g. when
+    // the output dir lives inside the input dir) are never picked up.
+    let mut inputs = Vec::new();
+    collect_hwp_files(input_dir, &mut inputs)?;
+    inputs.sort();
 
     let mut converted: usize = 0;
     let mut skipped: usize = 0;
     let mut failed: usize = 0;
 
-    for entry in entries {
-        let entry = entry?;
-
-        if entry.file_name().to_string_lossy().starts_with('.') {
-            tracing::debug!("Skipping hidden file: {:?}", entry.path());
-            continue;
-        }
-
-        if entry.file_type()?.is_symlink() {
-            tracing::debug!("Skipping symlink: {:?}", entry.path());
-            continue;
-        }
-
-        let path = entry.path();
-
-        if !path.is_file() {
-            continue;
-        }
-
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        if ext != "hwp" && ext != "hwpx" {
-            continue;
-        }
-
-        let stem = if let Some(s) = path.file_stem().and_then(|s| s.to_str()) {
-            s.to_owned()
-        } else {
+    for path in inputs {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             tracing::warn!("Skipping file with non-UTF-8 stem: {:?}", path);
             failed += 1;
             continue;
         };
 
-        let out_path = out_dir.join(format!("{stem}.md"));
+        // Directory of this file relative to the input root ("" at top level).
+        let rel_dir = path
+            .parent()
+            .and_then(|p| p.strip_prefix(input_dir).ok())
+            .unwrap_or_else(|| std::path::Path::new(""));
+
+        let target_dir = out_dir.join(rel_dir);
+        let out_path = target_dir.join(format!("{stem}.md"));
 
         if !force && out_path.exists() {
             eprintln!(
@@ -254,12 +240,13 @@ fn run_batch(
             continue;
         }
 
-        let file_assets_dir = if let Some(base) = assets_dir {
-            let d = base.join(&stem);
-            Some(d)
-        } else {
-            None
-        };
+        if let Err(e) = std::fs::create_dir_all(&target_dir) {
+            eprintln!("Error creating {}: {e}", target_dir.display());
+            failed += 1;
+            continue;
+        }
+
+        let file_assets_dir = assets_dir.map(|base| base.join(rel_dir).join(stem));
 
         match hwp2md::convert::to_markdown(
             &path,
@@ -284,5 +271,46 @@ fn run_batch(
         anyhow::bail!("All {failed} file(s) failed to convert");
     }
 
+    Ok(())
+}
+
+/// Recursively collect `.hwp` / `.hwpx` files under `dir`, skipping hidden
+/// entries and symlinks.
+fn collect_hwp_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            tracing::debug!("Skipping hidden entry: {:?}", path);
+            continue;
+        }
+
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            tracing::debug!("Skipping symlink: {:?}", path);
+            continue;
+        }
+
+        if file_type.is_dir() {
+            if let Err(e) = collect_hwp_files(&path, out) {
+                eprintln!("Error reading directory {}: {e}", path.display());
+            }
+            continue;
+        }
+
+        if !file_type.is_file() {
+            continue;
+        }
+
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        if ext == "hwp" || ext == "hwpx" {
+            out.push(path);
+        }
+    }
     Ok(())
 }

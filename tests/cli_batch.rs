@@ -386,3 +386,79 @@ fn batch_assets_dir_flag_accepted() {
         "expected '1 converted': {stdout}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// batch recurses into subdirectories and mirrors the structure in output
+// ---------------------------------------------------------------------------
+
+#[test]
+fn batch_recurses_and_mirrors_structure() {
+    let dir = tempdir().expect("tempdir");
+    let input = dir.path().join("in");
+    std::fs::create_dir_all(input.join("a/b")).expect("mkdir a/b");
+    std::fs::create_dir_all(input.join(".hidden")).expect("mkdir .hidden");
+
+    make_hwpx(&input.join("top.hwpx"));
+    make_hwpx(&input.join("a/mid.hwpx"));
+    make_hwpx(&input.join("a/b/deep.hwpx"));
+    make_hwpx(&input.join(".hidden/secret.hwpx"));
+
+    let out_dir = dir.path().join("out");
+    let assets = dir.path().join("img");
+
+    let result = cargo_bin()
+        .args([
+            "batch",
+            input.to_str().unwrap(),
+            "--output-dir",
+            out_dir.to_str().unwrap(),
+            "--assets-dir",
+            assets.to_str().unwrap(),
+        ])
+        .output()
+        .expect("execute batch");
+    assert!(
+        result.status.success(),
+        "batch must exit 0; stderr: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    assert!(out_dir.join("top.md").exists(), "top.md missing");
+    assert!(out_dir.join("a/mid.md").exists(), "a/mid.md missing");
+    assert!(out_dir.join("a/b/deep.md").exists(), "a/b/deep.md missing");
+    assert!(
+        !out_dir.join(".hidden").exists(),
+        "hidden directory must be skipped"
+    );
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    assert!(
+        stdout.contains("3 converted"),
+        "expected '3 converted' in stdout, got: {stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// batch without --output-dir writes next to each source file
+// ---------------------------------------------------------------------------
+
+#[test]
+fn batch_recursive_in_place() {
+    let dir = tempdir().expect("tempdir");
+    std::fs::create_dir_all(dir.path().join("sub")).expect("mkdir sub");
+    make_hwpx(&dir.path().join("sub/doc.hwpx"));
+
+    let result = cargo_bin()
+        .args(["batch", dir.path().to_str().unwrap()])
+        .output()
+        .expect("execute batch");
+    assert!(
+        result.status.success(),
+        "batch must exit 0; stderr: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        dir.path().join("sub/doc.md").exists(),
+        "sub/doc.md must be created next to its source"
+    );
+}

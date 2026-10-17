@@ -105,9 +105,6 @@ pub struct DocInfo {
     /// Style names in declaration order, parsed from `HWPTAG_STYLE` records (tag 0x001A).
     /// Index matches the `nStyleID` field in `PARA_HEADER` byte[6] (UINT8).
     pub styles: Vec<String>,
-    /// Raw 256-byte seed payload from `DISTRIBUTE_DOC_DATA` (tag 0x0026).
-    /// Present only in distribution (배포용) documents.
-    pub distribute_seed: Option<Vec<u8>>,
     /// Numbering and bullet style definitions from `HWPTAG_NUMBERING` / `HWPTAG_BULLET`
     /// records.  Indexed by 1-based ID; entry at position `id - 1` has `id == id`.
     pub(crate) numbering_defs: Vec<NumberingDef>,

@@ -1,9 +1,7 @@
 use crate::error::Hwp2MdError;
 use crate::hwp::control::extract_paragraphs_from_range;
 use crate::hwp::convert::hwp_to_ir;
-use crate::hwp::crypto::{
-    decrypt_seed, decrypt_viewtext, extract_aes_key, HWPTAG_DISTRIBUTE_DOC_DATA,
-};
+use crate::hwp::crypto::decrypt_view_text_stream;
 use crate::hwp::lenient;
 use crate::hwp::model::{DocInfo, FileHeader, HwpDocument, HwpSection, HwpVersion, NumberingDef};
 // record::* is intentionally kept as a glob: it re-exports many tag/ctrl
@@ -69,26 +67,11 @@ fn parse_hwp_file(path: &Path) -> Result<HwpDocument, Hwp2MdError> {
     let mut sections = Vec::new();
 
     if header.distributed {
-        // Distribution documents store body text in encrypted ViewText streams.
-        // Locate the DISTRIBUTE_DOC_DATA seed in DocInfo and derive the AES key.
-        let aes_key = match doc_info.distribute_seed.as_ref() {
-            Some(seed_data) => {
-                let decrypted = decrypt_seed(seed_data).map_err(|e| {
-                    Hwp2MdError::HwpParse(format!("distribute seed decryption failed: {e}"))
-                })?;
-                extract_aes_key(&decrypted)
-                    .map_err(|e| Hwp2MdError::HwpParse(format!("AES key extraction failed: {e}")))?
-            }
-            None => {
-                return Err(Hwp2MdError::HwpParse(
-                    "distributed HWP has no DISTRIBUTE_DOC_DATA record".into(),
-                ));
-            }
-        };
-
+        // Distribution documents store body text in encrypted ViewText
+        // streams; each stream carries its own key record.
         for i in 0..section_count {
             let section_path = format!("ViewText/Section{i}");
-            match read_distributed_section(&mut cfb, &section_path, &aes_key) {
+            match read_distributed_section(&mut cfb, &section_path, header.compressed) {
                 Ok(section) => sections.push(section),
                 Err(e) => {
                     tracing::warn!("Failed to read distributed {section_path}: {e}");
@@ -328,9 +311,6 @@ fn read_doc_info(
                 // text-heuristic fallback in detect_list_kind.
                 let _ = &rec.data; // parsed but not stored (bullet_id not yet wired up)
             }
-            HWPTAG_DISTRIBUTE_DOC_DATA if rec.data.len() >= 4 => {
-                doc_info.distribute_seed = Some(rec.data[4..].to_vec());
-            }
             _ => {}
         }
     }
@@ -364,13 +344,14 @@ fn count_viewtext_sections(cfb: &mut cfb::CompoundFile<std::fs::File>) -> usize 
 
 /// Read and decrypt a `ViewText/Section{N}` stream from a distribution document.
 ///
-/// The stream is stored as AES-128 ECB encrypted data without any compression
-/// header.  After decryption the bytes are identical in format to a normal
-/// `BodyText/Section{N}` stream and are deflate-decompressed before parsing.
+/// The stream starts with a `DISTRIBUTE_DOC_DATA` key record followed by
+/// AES-128 ECB encrypted data.  After decryption the bytes have the same
+/// format as a `BodyText/Section{N}` stream (deflate-compressed when the
+/// document is compressed).
 fn read_distributed_section(
     cfb: &mut cfb::CompoundFile<std::fs::File>,
     path: &str,
-    aes_key: &[u8; 16],
+    compressed: bool,
 ) -> Result<HwpSection, Hwp2MdError> {
     let stream = cfb
         .open_stream(path)
@@ -379,14 +360,16 @@ fn read_distributed_section(
     let mut raw = Vec::new();
     stream.take(MAX_CFB_STREAM).read_to_end(&mut raw)?;
 
-    // AES-128 ECB decrypt.
-    let decrypted = decrypt_viewtext(&raw, aes_key)
-        .map_err(|e| Hwp2MdError::HwpParse(format!("AES decrypt '{path}': {e}")))?;
+    let decrypted = decrypt_view_text_stream(&raw)
+        .map_err(|e| Hwp2MdError::HwpParse(format!("decrypt '{path}': {e}")))?;
 
-    // Deflate-decompress (same as normal BodyText).
-    let decompressed = decompress_stream(&decrypted)?;
+    let data = if compressed {
+        decompress_stream(&decrypted)?
+    } else {
+        decrypted
+    };
 
-    let mut cursor = Cursor::new(&decompressed);
+    let mut cursor = Cursor::new(&data);
     let records = parse_records(&mut cursor)?;
     Ok(parse_section_from_records(&records))
 }
@@ -430,22 +413,27 @@ pub(crate) fn extract_paragraph_text(data: &[u8]) -> String {
         match ch {
             // Paragraph end and section/column break: 2-byte code only, no inline data.
             0x0000 | 0x000D => {}
-            // Inline control objects: 2-byte code followed by 14 bytes of inline data.
-            // Codes 0x000E–0x001F are extended HWP 5.0 inline controls (e.g. auto-numbering
-            // 0x0015) that follow the same 14-byte structure as 0x0001–0x000C.  Failing to
-            // skip their inline data causes garbled characters (湰灧) in the output.
+            // Tab is an inline control: emit it, then skip its 14-byte block.
+            0x0009 => {
+                result.push('\t');
+                i = (i + CTRL_INLINE_PARAM_BYTES).min(len);
+            }
+            // Inline/extended control objects: 2-byte code followed by 14 bytes
+            // of inline data.  Failing to skip it causes garbled characters
+            // (湰灧) in the output.
             ch if is_inline_ctrl_code(ch) => {
                 if i + CTRL_INLINE_PARAM_BYTES > len {
                     break;
                 }
                 i += CTRL_INLINE_PARAM_BYTES;
             }
-            0x0009 => {
-                result.push('\t');
-            }
             0x000A => {
                 result.push('\n');
             }
+            // Single-WCHAR char controls.
+            0x0018 => result.push('-'),
+            0x001E | 0x001F => result.push(' '),
+            0x0019..=0x001D => {}
             _ => {
                 if let Some(c) = char::from_u32(u32::from(ch)) {
                     result.push(c);

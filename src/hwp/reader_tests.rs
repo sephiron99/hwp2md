@@ -33,6 +33,32 @@ fn extract_paragraph_text_tab() {
     assert_eq!(extract_paragraph_text(&data), "\t");
 }
 
+/// Tab is an 8-WCHAR inline control; its 12-byte payload and trailing code
+/// must not leak into the text.
+#[test]
+fn extract_paragraph_text_tab_skips_inline_payload() {
+    let mut units: Vec<u16> = vec![u16::from(b'A'), 0x0009];
+    units.extend_from_slice(&[0x8B2C, 0x0200, 0, 0, 0, 0, 0x0009]);
+    units.push(u16::from(b'B'));
+    let data = encode_u16s(&units);
+    assert_eq!(extract_paragraph_text(&data), "A\tB");
+}
+
+#[test]
+fn extract_paragraph_text_char_controls_are_single_wchar() {
+    let units = [
+        u16::from(b'a'),
+        0x0018, // hyphen
+        u16::from(b'b'),
+        0x001E, // non-breaking space
+        u16::from(b'c'),
+        0x001F, // fixed-width space
+        u16::from(b'd'),
+    ];
+    let data = encode_u16s(&units);
+    assert_eq!(extract_paragraph_text(&data), "a-b c d");
+}
+
 #[test]
 fn extract_paragraph_text_newline() {
     let data = encode_u16s(&[0x000A]);

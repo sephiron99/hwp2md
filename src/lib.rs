@@ -1,8 +1,9 @@
-//! Bidirectional converter between HWP/HWPX documents and Markdown.
+//! Bidirectional converter between HWPX documents and Markdown.
 //!
-//! Supports HWP 5.0 (binary OLE2-based) and HWPX (ZIP/XML-based) as input or
-//! output, with a language-agnostic intermediate representation ([`ir`]) in
-//! between.
+//! Supports HWPX (ZIP/XML-based) as input or output, with a
+//! language-agnostic intermediate representation ([`ir`]) in between.  The
+//! legacy binary HWP 5.0 format (`.hwp`) is not supported; save such
+//! documents as `.hwpx` in Hancom Office first.
 //!
 //! # Quick start
 //!
@@ -12,7 +13,7 @@
 //! use std::path::Path;
 //! use hwp2md::convert::ConvertOptions;
 //!
-//! // HWP/HWPX → Markdown (direction inferred from extensions)
+//! // HWPX → Markdown (direction inferred from extensions)
 //! ConvertOptions::new(Path::new("document.hwpx"), Path::new("document.md"))
 //!     .frontmatter(true)
 //!     .execute()
@@ -30,7 +31,7 @@
 //! ```no_run
 //! use std::path::Path;
 //!
-//! // HWP/HWPX → Markdown
+//! // HWPX → Markdown
 //! hwp2md::convert::to_markdown(
 //!     Path::new("document.hwpx"),
 //!     Some(Path::new("document.md")),
@@ -53,7 +54,6 @@
 //! | [`convert`] | Top-level conversion entry points |
 //! | [`ir`] | Intermediate representation (Document, Block, Inline, …) |
 //! | [`error`] | [`Hwp2MdError`] error type |
-//! | [`hwp`] | HWP 5.0 reader (CFB/OLE2) |
 //! | [`hwpx`] | HWPX reader and writer (ZIP/XML) |
 //! | [`md`] | Markdown reader and writer |
 //!
@@ -63,7 +63,7 @@
 
 pub mod convert;
 pub mod error;
-pub mod hwp;
+pub(crate) mod heading_style;
 pub mod hwpx;
 pub mod ir;
 pub mod md;

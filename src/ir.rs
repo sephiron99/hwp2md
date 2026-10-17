@@ -31,7 +31,7 @@ impl Default for Document {
     }
 }
 
-/// Document-level metadata extracted from HWP/HWPX summary streams.
+/// Document-level metadata extracted from HWPX documents.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Metadata {
     /// Document title.

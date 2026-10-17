@@ -1,4 +1,4 @@
-use crate::hwp::heading_style::detect_korean_regulation_heading;
+use crate::heading_style::detect_korean_regulation_heading;
 use crate::ir::{self, Inline, InlineFormat};
 
 use super::state::FormattingState;

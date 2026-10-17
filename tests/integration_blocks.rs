@@ -23,8 +23,7 @@ use hwp2md::{ir, md};
 #[test]
 fn hwpx_equation_element_produces_math_block_and_latex_markdown() {
     // NOTE: The HWPX <hp:equation> handler (handlers.rs) stores the raw
-    // element text directly as `tex` — it does NOT call `eqedit_to_latex`.
-    // That function is only wired into the HWP 5.0 binary reader path.
+    // element text directly as `tex` — no EQEDIT → LaTeX conversion.
     // So `tex` is exactly the literal XML text content ("x + y" here).
     let eq_xml = r#"<hp:equation>x + y</hp:equation>"#;
 

@@ -15,7 +15,4 @@ Cargo.lock
 output/
 *.hwp
 *.hwpx
-!samples/*.hwp
 !samples/*.hwpx
-!tests/fixtures/real/*.hwp
-!tests/fixtures/real/*.hwpx

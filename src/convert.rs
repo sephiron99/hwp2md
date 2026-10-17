@@ -1,4 +1,4 @@
-//! High-level conversion entry points for HWP/HWPX ↔ Markdown.
+//! High-level conversion entry points for HWPX ↔ Markdown.
 
 use std::collections::HashMap;
 use std::fs;
@@ -6,13 +6,11 @@ use std::path::Path;
 
 /// Maximum permitted size for a Markdown file passed to [`check`].
 ///
-/// Mirrors the 256 MB decompressed-stream limit used for HWP CFB streams so
-/// that the `check` function never allocates an unbounded amount of heap memory
-/// for a plain-text input.
+/// Keeps the `check` function from allocating an unbounded amount of heap
+/// memory for a plain-text input.
 const MAX_MD_FILE_SIZE: u64 = 256 * 1024 * 1024; // 268_435_456 bytes
 
 use crate::error::Hwp2MdError;
-use crate::hwp;
 use crate::hwpx;
 use crate::ir;
 use crate::md;
@@ -37,9 +35,9 @@ pub enum TableFormat {
     Repeat,
 }
 
-/// Convert an HWP or HWPX document to Markdown.
+/// Convert an HWPX document to Markdown.
 ///
-/// Reads `input` (`.hwp` or `.hwpx`), converts it to Markdown, and writes the
+/// Reads `input` (`.hwpx`), converts it to Markdown, and writes the
 /// result to `output` (or stdout when `None`).  Embedded images are extracted
 /// to `assets_dir` when provided.  Set `frontmatter` to `true` to prepend a
 /// YAML front-matter block with document metadata.
@@ -68,7 +66,7 @@ pub fn to_markdown(
     )
 }
 
-/// Convert an HWP or HWPX document to Markdown, choosing how tables with
+/// Convert an HWPX document to Markdown, choosing how tables with
 /// merged cells are rendered via `table_format`.
 ///
 /// See [`to_markdown`] for the remaining parameters; [`to_markdown`] is a
@@ -93,17 +91,14 @@ pub fn to_markdown_with_table_format(
         .to_lowercase();
 
     let doc = match ext.as_str() {
-        "hwp" => {
-            tracing::info!("Parsing HWP 5.0: {:?}", input);
-            hwp::read_hwp(input)?
-        }
+        "hwp" => return Err(hwp_unsupported()),
         "hwpx" => {
             tracing::info!("Parsing HWPX: {:?}", input);
             hwpx::read_hwpx(input)?
         }
         _ => {
             return Err(Hwp2MdError::UnsupportedFormat(format!(
-                ".{ext}. Expected .hwp or .hwpx"
+                ".{ext}. Expected .hwpx"
             )))
         }
     };
@@ -178,7 +173,7 @@ pub fn to_hwpx(
     Ok(())
 }
 
-/// Print human-readable metadata and statistics for an HWP or HWPX file.
+/// Print human-readable metadata and statistics for an HWPX file.
 ///
 /// Writes a summary (format, title, author, section count, block count,
 /// estimated character count, asset count) to stdout.
@@ -195,10 +190,7 @@ pub fn show_info(input: &Path) -> Result<(), Hwp2MdError> {
         .to_lowercase();
 
     match ext.as_str() {
-        "hwp" => {
-            let doc = hwp::read_hwp(input)?;
-            print_info(&doc, input);
-        }
+        "hwp" => return Err(hwp_unsupported()),
         "hwpx" => {
             let doc = hwpx::read_hwpx(input)?;
             print_info(&doc, input);
@@ -216,15 +208,14 @@ pub fn show_info(input: &Path) -> Result<(), Hwp2MdError> {
 ///
 /// | Input ext            | Output ext           | Action       |
 /// | -------------------- | -------------------- | ------------ |
-/// | `.hwp`, `.hwpx`      | `.md`, `.markdown`   | [`to_markdown`] |
+/// | `.hwpx`              | `.md`, `.markdown`   | [`to_markdown`] |
 /// | `.md`, `.markdown`   | `.hwpx`              | [`to_hwpx`]  |
 ///
-/// `.hwp` is a **read-only** format here — Markdown can never be written to
-/// a `.hwp` output, only `.hwpx`.  The legacy binary HWP writer is out of
-/// scope for this crate.
+/// The legacy binary HWP 5.0 format (`.hwp`) is not supported in either
+/// direction; save such documents as `.hwpx` in Hancom Office first.
 ///
-/// Any other combination — including same-format pairs, `.hwp` as the
-/// output extension, or unknown extensions — returns
+/// Any other combination — including same-format pairs, `.hwp` on either
+/// side, or unknown extensions — returns
 /// [`Hwp2MdError::UnsupportedFormat`] with a message describing the
 /// offending pair.  The function never queries the network and never
 /// inspects file contents to determine the direction; only the file
@@ -262,19 +253,28 @@ pub fn convert_auto(input: &Path, output: &Path, force: bool) -> Result<(), Hwp2
     let out_kind = classify_format(&out_ext);
 
     match (in_kind, out_kind) {
-        (FormatKind::Hwp | FormatKind::Hwpx, FormatKind::Markdown) => {
-            to_markdown(input, Some(output), None, false)
-        }
+        (FormatKind::Hwp, _) => Err(hwp_unsupported()),
+        (FormatKind::Hwpx, FormatKind::Markdown) => to_markdown(input, Some(output), None, false),
         (FormatKind::Markdown, FormatKind::Hwpx) => to_hwpx(input, Some(output), None),
         _ => Err(Hwp2MdError::UnsupportedFormat(format!(
             "cannot infer conversion direction from .{in_ext} -> .{out_ext}; \
-             expected .hwp/.hwpx -> .md/.markdown or .md/.markdown -> .hwpx"
+             expected .hwpx -> .md/.markdown or .md/.markdown -> .hwpx"
         ))),
     }
 }
 
+/// Error returned for legacy binary `.hwp` input, which is not supported.
+fn hwp_unsupported() -> Hwp2MdError {
+    Hwp2MdError::UnsupportedFormat(
+        ".hwp (HWP 5.0 binary format is not supported; \
+         save the document as .hwpx in Hancom Office first)"
+            .into(),
+    )
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum FormatKind {
+    /// Legacy binary HWP 5.0 — recognised only to give a helpful error.
     Hwp,
     Hwpx,
     Markdown,
@@ -296,7 +296,7 @@ fn classify_format(ext: &str) -> FormatKind {
 /// to parse it.  Returns `Ok(())` if parsing succeeds, or an [`Hwp2MdError`]
 /// with details if the file cannot be read or is structurally invalid.
 ///
-/// Supported extensions: `.hwp`, `.hwpx`, `.md`, `.markdown`.
+/// Supported extensions: `.hwpx`, `.md`, `.markdown`.
 ///
 /// # Errors
 ///
@@ -310,10 +310,7 @@ pub fn check(input: &Path) -> Result<(), Hwp2MdError> {
         .to_lowercase();
 
     match ext.as_str() {
-        "hwp" => {
-            tracing::info!("Checking HWP 5.0: {:?}", input);
-            hwp::read_hwp(input)?;
-        }
+        "hwp" => return Err(hwp_unsupported()),
         "hwpx" => {
             tracing::info!("Checking HWPX: {:?}", input);
             hwpx::read_hwpx(input)?;
@@ -333,7 +330,7 @@ pub fn check(input: &Path) -> Result<(), Hwp2MdError> {
         }
         _ => {
             return Err(Hwp2MdError::UnsupportedFormat(format!(
-                ".{ext}. Expected .hwp, .hwpx, .md, or .markdown"
+                ".{ext}. Expected .hwpx, .md, or .markdown"
             )));
         }
     }
@@ -503,7 +500,7 @@ fn write_assets(doc: &ir::Document, dir: &Path) -> Result<(), Hwp2MdError> {
 
 // ── ConvertOptions builder ────────────────────────────────────────────────────
 
-/// A builder for configuring and executing a single HWP/HWPX ↔ Markdown
+/// A builder for configuring and executing a single HWPX ↔ Markdown
 /// conversion.
 ///
 /// `ConvertOptions` provides a fluent API that is easier to use than the
@@ -550,7 +547,7 @@ impl<'a> ConvertOptions<'a> {
     ///
     /// | `input` extension     | `output` extension    | Action           |
     /// | --------------------- | --------------------- | ---------------- |
-    /// | `.hwp`, `.hwpx`       | `.md`, `.markdown`    | → Markdown       |
+    /// | `.hwpx`               | `.md`, `.markdown`    | → Markdown       |
     /// | `.md`, `.markdown`    | `.hwpx`               | → HWPX           |
     ///
     /// All optional settings default to their "off" value; call the builder
@@ -570,7 +567,7 @@ impl<'a> ConvertOptions<'a> {
 
     /// Set the directory into which embedded images are extracted.
     ///
-    /// Only used when converting HWP/HWPX → Markdown.  Ignored for the
+    /// Only used when converting HWPX → Markdown.  Ignored for the
     /// reverse direction.
     #[must_use]
     pub fn assets_dir(mut self, dir: &'a Path) -> Self {
@@ -580,7 +577,7 @@ impl<'a> ConvertOptions<'a> {
 
     /// Prepend a YAML front-matter block with document metadata.
     ///
-    /// Only used when converting HWP/HWPX → Markdown.  Defaults to `false`.
+    /// Only used when converting HWPX → Markdown.  Defaults to `false`.
     #[must_use]
     pub fn frontmatter(mut self, enabled: bool) -> Self {
         self.frontmatter = enabled;
@@ -600,7 +597,7 @@ impl<'a> ConvertOptions<'a> {
     /// Set the table rendering format for merged cells (`colspan`/`rowspan`
     /// > 1).
     ///
-    /// Only used when converting HWP/HWPX → Markdown.  Ignored for the
+    /// Only used when converting HWPX → Markdown.  Ignored for the
     /// reverse direction.  Defaults to [`TableFormat::Html`].
     #[must_use]
     pub fn table_format(mut self, format: TableFormat) -> Self {
@@ -626,7 +623,7 @@ impl<'a> ConvertOptions<'a> {
     /// - [`Hwp2MdError::UnsupportedFormat`] — unknown extension pair.
     /// - [`Hwp2MdError::OutputExists`] — output exists and `force` is `false`.
     /// - [`Hwp2MdError::Io`] — file read/write failure.
-    /// - [`Hwp2MdError::HwpParse`] / [`Hwp2MdError::HwpxParse`] — parse error
+    /// - [`Hwp2MdError::HwpxParse`] — parse error
     ///   in the input document.
     /// - [`Hwp2MdError::HwpxWrite`] — error while generating the HWPX output.
     pub fn execute(self) -> Result<(), Hwp2MdError> {
@@ -650,21 +647,20 @@ impl<'a> ConvertOptions<'a> {
             .to_lowercase();
 
         match (classify_format(&in_ext), classify_format(&out_ext)) {
-            (FormatKind::Hwp | FormatKind::Hwpx, FormatKind::Markdown) => {
-                to_markdown_with_table_format(
-                    self.input,
-                    Some(self.output),
-                    self.assets_dir,
-                    self.frontmatter,
-                    self.table_format,
-                )
-            }
+            (FormatKind::Hwp, _) => Err(hwp_unsupported()),
+            (FormatKind::Hwpx, FormatKind::Markdown) => to_markdown_with_table_format(
+                self.input,
+                Some(self.output),
+                self.assets_dir,
+                self.frontmatter,
+                self.table_format,
+            ),
             (FormatKind::Markdown, FormatKind::Hwpx) => {
                 to_hwpx(self.input, Some(self.output), self.style)
             }
             _ => Err(Hwp2MdError::UnsupportedFormat(format!(
                 "cannot infer conversion direction from .{in_ext} -> .{out_ext}; \
-                 expected .hwp/.hwpx -> .md/.markdown or .md/.markdown -> .hwpx"
+                 expected .hwpx -> .md/.markdown or .md/.markdown -> .hwpx"
             ))),
         }
     }

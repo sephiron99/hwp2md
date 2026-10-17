@@ -6,13 +6,13 @@
 
 > [English](README.en.md)
 
-**hwp2md**는 한국 한글 문서 형식 — HWP 5.0 (바이너리 OLE2)과 HWPX (XML/ZIP) — 을 CommonMark 호환 Markdown으로 양방향 변환하는 도구입니다. CLI와 Rust 라이브러리 두 가지 형태로 제공되며, 빌드 파이프라인, 정적 사이트 생성기, 공공기관 문서 관리 워크플로우에 쉽게 통합할 수 있습니다.
+**hwp2md**는 한글 문서 형식 HWPX (XML/ZIP)와 CommonMark 호환 Markdown을 양방향 변환하는 도구입니다. CLI와 Rust 라이브러리 두 가지 형태로 제공되며, 빌드 파이프라인, 정적 사이트 생성기, 공공기관 문서 관리 워크플로우에 쉽게 통합할 수 있습니다.
 
 ## 주요 기능
 
-- **HWP 5.0** 바이너리 형식 (OLE2/CFB 컨테이너) → Markdown
 - **HWPX** (ZIP + XML) → Markdown
-- **Markdown → HWPX** (바이너리 HWP 출력은 미지원)
+- **Markdown → HWPX**
+- HWP 5.0 바이너리(`.hwp`)는 지원하지 않습니다. 한컴오피스에서 `.hwpx`로 저장한 뒤 변환하세요.
 - 제목(H1-H6), 문단, 굵게, 기울임, 밑줄, 취소선, 인라인 코드
 - 위첨자 / 아래첨자
 - 하이퍼링크 (`fieldBegin`/`fieldEnd` 패턴)
@@ -26,7 +26,7 @@
 - 인용 블록
 - 이미지 (alt 텍스트; 에셋 디렉토리 추출 옵션)
 - 각주 (`[^id]` 구문)
-- 수식 — HWP EqEdit 수식을 LaTeX로 변환 (`$...$` / `$$...$$`)
+- 수식 블록 (`$...$` / `$$...$$`; HWPX 수식 스크립트는 변환 없이 그대로 출력)
 - 문서 메타데이터 YAML 프론트매터 출력
 - `info` 서브커맨드 — 변환 없이 문서 정보 확인
 - YAML 스타일 템플릿 (용지 크기, 여백, 글꼴, 제목 줄간격)
@@ -54,20 +54,20 @@ cargo build --release
 
 ## CLI 사용법
 
-### HWP/HWPX → Markdown 변환
+### HWPX → Markdown 변환
 
 ```bash
 # 표준 출력으로 Markdown 출력
-hwp2md to-md report.hwp
+hwp2md to-md report.hwpx
 
 # 파일로 저장
-hwp2md to-md report.hwp -o report.md
+hwp2md to-md report.hwpx -o report.md
 
 # 이미지 추출과 함께 변환
 hwp2md to-md report.hwpx -o report.md --assets-dir ./images
 
 # YAML 프론트매터 포함
-hwp2md to-md report.hwp -o report.md --frontmatter
+hwp2md to-md report.hwpx -o report.md --frontmatter
 ```
 
 ### Markdown → HWPX 변환
@@ -100,7 +100,8 @@ hwp2md convert report.hwpx report.md --force
 ### 디렉토리 일괄 변환
 
 ```bash
-# 디렉토리 내 모든 HWP/HWPX 파일 변환 (하위 디렉토리 포함, 구조 그대로 유지)
+# 디렉토리 내 모든 HWPX 파일 변환 (하위 디렉토리 포함, 구조 그대로 유지)
+# .hwp 파일은 건너뛰고 목록을 알려줍니다
 hwp2md batch ./reports/ --output-dir converted/
 
 # 파일별 이미지 서브디렉토리 추출
@@ -113,9 +114,9 @@ hwp2md batch ./reports/ -o converted/ --force
 ### 문서 정보 확인
 
 ```bash
-hwp2md info report.hwp
-# File: report.hwp
-# Format: hwp
+hwp2md info report.hwpx
+# File: report.hwpx
+# Format: hwpx
 # Title: 연간 보고서 2025
 # Author: 홍길동
 # Sections: 4
@@ -129,8 +130,8 @@ hwp2md info report.hwp
 `--log-level` 플래그에 `tracing` 필터 문자열 사용 (기본값: `info`):
 
 ```bash
-hwp2md --log-level debug to-md report.hwp
-hwp2md --log-level warn  to-md report.hwp -o report.md
+hwp2md --log-level debug to-md report.hwpx
+hwp2md --log-level warn  to-md report.hwpx -o report.md
 ```
 
 ## 라이브러리 사용법
@@ -148,7 +149,7 @@ hwp2md = "0.5"
 use hwp2md::convert;
 
 fn main() -> anyhow::Result<()> {
-    // HWP/HWPX → Markdown (output이 None이면 stdout)
+    // HWPX → Markdown (output이 None이면 stdout)
     convert::to_markdown(
         "report.hwpx".as_ref(),
         Some("report.md".as_ref()),
@@ -170,7 +171,7 @@ fn main() -> anyhow::Result<()> {
 ### 중간 표현(IR) 직접 사용
 
 ```rust
-use hwp2md::{hwp, hwpx, md, ir};
+use hwp2md::{hwpx, md, ir};
 
 // 문서를 IR로 파싱
 let doc: ir::Document = hwpx::read_hwpx("report.hwpx".as_ref())?;
@@ -207,40 +208,35 @@ println!("{}개 섹션", doc.sections.len());
 
 ## 형식 지원 매트릭스
 
-| 기능 | HWP 5.0 → MD | HWPX → MD | MD → HWPX |
-|------|:---:|:---:|:---:|
-| 제목 (H1-H6) | O | O | O |
-| 문단 | O | O | O |
-| 굵게 / 기울임 | O | O | O |
-| 밑줄 | O | O | O |
-| 취소선 | O | O | O |
-| 인라인 코드 | O | O | O |
-| 위첨자 / 아래첨자 | O | O | O |
-| 하이퍼링크 | O | O | O |
-| 루비 주석 | O | O | O |
-| 순서 목록 | O | O | O |
-| 비순서 목록 | O | O | O |
-| 중첩 목록 | O | O | O |
-| 표 | O | O | O |
-| 이미지 (추출) | O | O | O |
-| 코드 블록 | O | O | O |
-| 인용 블록 | O | O | O |
-| 각주 | O | O | O |
-| 수식 (LaTeX) | O | O | O |
-| YAML 프론트매터 | O | O | - |
-| 다단 레이아웃 | 단일화 | 단일화 | - |
-| 머리글 / 바닥글 | 미지원 | O | O |
-| DRM 보호 HWP | X | X | - |
-| MD → HWP 바이너리 | - | - | X |
+| 기능 | HWPX → MD | MD → HWPX |
+|------|:---:|:---:|
+| 제목 (H1-H6) | O | O |
+| 문단 | O | O |
+| 굵게 / 기울임 | O | O |
+| 밑줄 | O | O |
+| 취소선 | O | O |
+| 인라인 코드 | O | O |
+| 위첨자 / 아래첨자 | O | O |
+| 하이퍼링크 | O | O |
+| 루비 주석 | O | O |
+| 순서 목록 | O | O |
+| 비순서 목록 | O | O |
+| 중첩 목록 | O | O |
+| 표 | O | O |
+| 이미지 (추출) | O | O |
+| 코드 블록 | O | O |
+| 인용 블록 | O | O |
+| 각주 | O | O |
+| 수식 | O | O |
+| YAML 프론트매터 | O | - |
+| 다단 레이아웃 | 단일화 | - |
+| 머리글 / 바닥글 | O | O |
 
 ## 아키텍처
 
 ```
-HWP 5.0 (.hwp)  ──── hwp::read_hwp()   ──┐
-                                         ├──> ir::Document ──> md::write_markdown() ──> Markdown
-HWPX (.hwpx)    ──── hwpx::read_hwpx() ──┘
-                                           ┌── ir::Document <── md::parse_markdown() <── Markdown
-                                           └──> hwpx::write_hwpx() ──> HWPX (.hwpx)
+HWPX (.hwpx) ── hwpx::read_hwpx() ──> ir::Document ──> md::write_markdown() ──> Markdown
+HWPX (.hwpx) <── hwpx::write_hwpx() <── ir::Document <── md::parse_markdown() <── Markdown
 ```
 
 변환 파이프라인은 형식 중립적인 중간 표현(`ir::Document`)으로 분리되어 있습니다. 모든 리더는 `ir::Document`를 생산하고, 모든 라이터는 이를 소비합니다. 형식별 코드가 격리되어 새로운 입출력 형식을 추가하기 쉽습니다.
@@ -265,7 +261,6 @@ src/
   convert.rs       고수준 API: to_markdown / to_hwpx / show_info
   ir.rs            중간 표현 타입
   error.rs         Hwp2MdError 열거형 (thiserror)
-  hwp/             HWP 5.0 리더 (CFB 컨테이너, 레코드 파서, EqEdit)
   hwpx/            HWPX 리더 + 라이터 (ZIP + quick-xml)
   md/              Markdown 파서 (comrak) + 라이터
 tests/             통합 테스트
@@ -273,15 +268,13 @@ tests/             통합 테스트
 
 ## 알려진 제한 사항
 
-- DRM 보호(배포용) HWP 파일은 지원하지 않습니다.
+- HWP 5.0 바이너리(`.hwp`) 형식은 입력·출력 모두 지원하지 않습니다.
 - 다단 레이아웃은 단일 컬럼으로 평탄화됩니다.
 - colspan/rowspan이 복잡한 표는 Markdown에서 HTML로 폴백합니다.
-- HWP 5.0 바이너리의 머리글/바닥글은 건너뜁니다 (HWPX는 완전 지원).
-- 바이너리 HWP 5.0 형식으로의 역변환(MD → HWP)은 미지원입니다. HWPX 출력만 가능합니다.
 
 ## 변환 버그 신고
 
-`hwp2md`가 HWP/HWPX 파일을 올바르게 변환하지 못하는 경우, **[Conversion Bug](https://github.com/hephaex/hwp2md/issues/new?template=conversion-bug.yml)** 템플릿으로 이슈를 등록해 주세요. 문제가 되는 파일을 첨부하면 CI가 자동으로 변환을 시도하고 결과를 이슈 댓글로 게시합니다.
+`hwp2md`가 HWPX 파일을 올바르게 변환하지 못하는 경우, **[Conversion Bug](https://github.com/hephaex/hwp2md/issues/new?template=conversion-bug.yml)** 템플릿으로 이슈를 등록해 주세요. 문제가 되는 파일을 첨부하면 CI가 자동으로 변환을 시도하고 결과를 이슈 댓글로 게시합니다.
 
 ## 기여
 

@@ -464,17 +464,17 @@ fn batch_recursive_in_place() {
 }
 
 // ---------------------------------------------------------------------------
-// batch with doc.hwp + doc.hwpx in one dir → only one writes doc.md
+// batch with doc.hwpx + doc.HWPX in one dir → only one writes doc.md
 // ---------------------------------------------------------------------------
 
 #[test]
 fn batch_same_stem_converted_once() {
     let dir = tempdir().expect("tempdir");
     make_hwpx(&dir.path().join("doc.hwpx"));
-    // Sorted order is doc.HWPX < doc.hwp < doc.hwpx, so the valid doc.HWPX
-    // wins and the invalid doc.hwp must be skipped without being parsed.
+    if dir.path().join("doc.HWPX").exists() {
+        return; // case-insensitive filesystem: the collision cannot occur
+    }
     std::fs::copy(dir.path().join("doc.hwpx"), dir.path().join("doc.HWPX")).expect("copy");
-    std::fs::write(dir.path().join("doc.hwp"), b"not really hwp").expect("write hwp");
 
     let result = cargo_bin()
         .args(["batch", dir.path().to_str().unwrap()])
@@ -487,9 +487,37 @@ fn batch_same_stem_converted_once() {
         "expected duplicate-output skip; stderr: {stderr}"
     );
     assert!(
-        stdout.contains("0 failed"),
+        stdout.contains("1 converted") && stdout.contains("1 skipped"),
         "duplicate must be skipped, not attempted; stdout: {stdout}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// batch reports legacy .hwp files as skipped (HWP 5.0 is not supported)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn batch_reports_legacy_hwp_as_skipped() {
+    let dir = tempdir().expect("tempdir");
+    make_hwpx(&dir.path().join("new.hwpx"));
+    std::fs::write(dir.path().join("old.hwp"), b"not parsed").expect("write hwp");
+
+    let result = cargo_bin()
+        .args(["batch", dir.path().to_str().unwrap()])
+        .output()
+        .expect("execute batch");
+    assert!(result.status.success());
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("old.hwp") && stderr.contains("not supported"),
+        "expected legacy .hwp notice; stderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("1 converted, 1 skipped, 0 failed"),
+        "unexpected summary: {stdout}"
+    );
+    assert!(!dir.path().join("old.md").exists());
 }
 
 // ---------------------------------------------------------------------------

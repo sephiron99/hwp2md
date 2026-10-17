@@ -22,8 +22,7 @@ use hwp2md::{ir, md};
 // NOTE: Real OWPML/HWPX files encode lists as flat <hp:p paraPrIDRef numPrIDRef>
 // paragraphs (handled in flush.rs via group_list_paragraphs). The <ol>/<ul>/<li>
 // form below is a secondary/lenient ingestion path in handlers.rs:81-95.
-// Canonical OWPML list coverage lives in reader_tests_list.rs and
-// real_hwp_list_accuracy.rs; these tests pin the secondary ol/ul/li handler.
+// Canonical OWPML list coverage lives in reader_tests_list.rs; these tests pin the secondary ol/ul/li handler.
 
 /// `<ol><li>` produces `ir::Block::List { ordered: true }` with item text
 /// preserved, and renders as a GFM numbered list in Markdown.

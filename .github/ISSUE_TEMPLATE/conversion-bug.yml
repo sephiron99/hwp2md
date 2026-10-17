@@ -1,11 +1,11 @@
 name: Conversion Bug
-description: HWP/HWPX 파일 변환 오류를 보고합니다
+description: HWPX 파일 변환 오류를 보고합니다
 labels: ["conversion-bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        HWP 또는 HWPX 파일 변환 시 발생하는 오류를 보고해 주세요.
+        HWPX 파일 변환 시 발생하는 오류를 보고해 주세요. (HWP 5.0 바이너리 `.hwp`는 지원하지 않습니다. 한컴오피스에서 `.hwpx`로 저장한 뒤 시도해 주세요.)
         파일을 첨부하면 CI가 자동으로 변환을 시도하고 결과를 코멘트로 게시합니다.
 
   - type: textarea
@@ -20,9 +20,9 @@ body:
   - type: textarea
     id: file
     attributes:
-      label: HWP/HWPX 파일
+      label: HWPX 파일
       description: |
-        문제가 발생하는 HWP 또는 HWPX 파일을 여기에 드래그하여 첨부해 주세요.
+        문제가 발생하는 HWPX 파일을 여기에 드래그하여 첨부해 주세요.
         ZIP으로 압축하여 첨부해도 됩니다.
       placeholder: "파일을 여기에 드래그하세요"
     validations:
@@ -60,7 +60,6 @@ body:
     attributes:
       label: 파일 형식
       options:
-        - HWP (한글 5.0 바이너리)
         - HWPX (OOXML 기반)
         - 모름
     validations:

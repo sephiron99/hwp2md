@@ -6,13 +6,10 @@ use thiserror::Error;
 /// All errors that can be returned by this crate.
 #[derive(Error, Debug)]
 pub enum Hwp2MdError {
-    /// The file extension is not `.hwp`, `.hwpx`, `.md`, or `.markdown`.
+    /// The file extension is not `.hwpx`, `.md`, or `.markdown` (legacy
+    /// binary `.hwp` is also reported with this variant).
     #[error("Unsupported format: {0}")]
     UnsupportedFormat(String),
-
-    /// A structural or data error was encountered while reading a HWP 5.0 file.
-    #[error("HWP parse error: {0}")]
-    HwpParse(String),
 
     /// A structural or data error was encountered while reading an HWPX file.
     #[error("HWPX parse error: {0}")]
@@ -21,14 +18,6 @@ pub enum Hwp2MdError {
     /// An error occurred while generating HWPX output.
     #[error("HWPX write error: {0}")]
     HwpxWrite(String),
-
-    /// A zlib/deflate stream could not be decompressed.
-    #[error("decompression error: {0}")]
-    Decompress(String),
-
-    /// Decompressed output exceeded the 256 MB safety limit.
-    #[error("decompression bomb: output exceeded {0} bytes")]
-    DecompressionBomb(u64),
 
     /// An input file was rejected because it exceeded a hard size limit.
     ///
@@ -62,26 +51,6 @@ pub enum Hwp2MdError {
         /// Path of the pre-existing output file.
         path: PathBuf,
     },
-
-    /// The HWP file is DRM-protected (encrypted distribution document).
-    ///
-    /// HWP files with the `has_drm` flag set in the file header cannot be
-    /// parsed without a valid decryption key.  This error is distinct from
-    /// [`Hwp2MdError::HwpParse`] so that callers can give a precise,
-    /// actionable message rather than a generic parse-error string.
-    #[error("DRM-protected file: {}", path.display())]
-    DrmProtected {
-        /// Path of the DRM-protected HWP file.
-        path: PathBuf,
-    },
-
-    /// A binary record in the HWP stream has an invalid or inconsistent header.
-    #[error("invalid record: {0}")]
-    InvalidRecord(String),
-
-    /// A text encoding conversion failed (e.g. UTF-16LE decode error).
-    #[error("encoding error: {0}")]
-    Encoding(String),
 
     /// An underlying I/O operation failed.
     #[error("IO error: {0}")]

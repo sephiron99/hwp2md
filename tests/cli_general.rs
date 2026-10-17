@@ -302,7 +302,7 @@ fn cli_convert_help_lists_supported_pairs() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains(".hwp") && stdout.contains(".md"),
+        stdout.contains(".hwpx") && stdout.contains(".md"),
         "convert help must mention supported extensions: {stdout}"
     );
 }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "hwp2md")]
-#[command(about = "HWP/HWPX ↔ Markdown bidirectional converter")]
+#[command(about = "HWPX ↔ Markdown bidirectional converter")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -17,9 +17,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Convert HWP/HWPX to Markdown
+    /// Convert HWPX to Markdown
     ToMd {
-        /// Input HWP or HWPX file
+        /// Input HWPX file
         input: PathBuf,
         /// Output Markdown file (default: stdout)
         #[arg(short, long)]
@@ -47,42 +47,42 @@ enum Commands {
     },
     /// Show document info without converting
     Info {
-        /// Input HWP or HWPX file
+        /// Input HWPX file
         input: PathBuf,
     },
     /// Validate a file by parsing it without writing output
     Check {
-        /// Input file (.hwp, .hwpx, .md, or .markdown)
+        /// Input file (.hwpx, .md, or .markdown)
         input: PathBuf,
     },
     /// Convert between supported formats by inferring the direction from
     /// the input and output file extensions.
     ///
     /// Supported pairs:
-    ///   .hwp / .hwpx  →  .md / .markdown
+    ///   .hwpx  →  .md / .markdown
     ///   .md / .markdown  →  .hwpx
     Convert {
-        /// Input file (.hwp, .hwpx, .md, or .markdown)
+        /// Input file (.hwpx, .md, or .markdown)
         input: PathBuf,
         /// Output file (.md, .markdown, or .hwpx)
         output: PathBuf,
         /// Overwrite the output file if it already exists
         #[arg(long)]
         force: bool,
-        /// Extract images to this directory (HWP/HWPX → MD only)
+        /// Extract images to this directory (HWPX → MD only)
         #[arg(long)]
         assets_dir: Option<PathBuf>,
-        /// Include frontmatter metadata (HWP/HWPX → MD only)
+        /// Include frontmatter metadata (HWPX → MD only)
         #[arg(long)]
         frontmatter: bool,
         /// Style template YAML (MD → HWPX only)
         #[arg(long)]
         style: Option<PathBuf>,
     },
-    /// Batch-convert all HWP/HWPX files in a directory (recursively) to Markdown,
+    /// Batch-convert all HWPX files in a directory (recursively) to Markdown,
     /// mirroring the subdirectory structure in the output directory
     Batch {
-        /// Input directory containing .hwp/.hwpx files (searched recursively)
+        /// Input directory containing .hwpx files (searched recursively)
         input_dir: PathBuf,
         /// Output directory for .md files (default: same as input)
         #[arg(short, long)]
@@ -175,13 +175,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Batch-convert all `.hwp` / `.hwpx` files under `input_dir` to Markdown.
+/// Batch-convert all `.hwpx` files under `input_dir` to Markdown.
 ///
 /// Files are converted in parallel with rayon.  Subdirectories are walked
-/// recursively and the directory structure is mirrored in `output_dir` (or `input_dir` when not supplied): for example
-/// `input/a/b/doc.hwp` becomes `output/a/b/doc.md`.  When `assets_dir` is
+/// recursively and the directory structure is mirrored in `output_dir` (or
+/// `input_dir` when not supplied): for example `input/a/b/doc.hwpx` becomes `output/a/b/doc.md`.  When `assets_dir` is
 /// given, images go to `assets_dir/a/b/doc/`.  Hidden entries and symlinks
-/// (files and directories) are skipped.
+/// (files and directories) are skipped.  Legacy `.hwp` files are reported
+/// and counted as skipped, since HWP 5.0 is not supported.
 ///
 /// Conversion errors for individual files are logged and counted; the
 /// function returns `Ok(())` as long as at least one file succeeded (or zero
@@ -209,16 +210,25 @@ fn run_batch(
     // Collect every input first so files written during conversion (e.g. when
     // the output dir lives inside the input dir) are never picked up.
     let mut inputs = Vec::new();
-    collect_hwp_files(input_dir, &mut inputs)?;
+    let mut legacy = Vec::new();
+    collect_hwpx_files(input_dir, &mut inputs, &mut legacy)?;
     inputs.sort();
+    legacy.sort();
 
     // Resolve output paths up front (sequentially) so that two inputs mapping
-    // to the same output — e.g. `doc.hwp` and `doc.hwpx` in one directory —
+    // to the same output — e.g. `doc.hwpx` and `doc.HWPX` in one directory —
     // are never written concurrently.  The first one in sorted order wins.
     let mut jobs = Vec::with_capacity(inputs.len());
     let mut seen_outputs = std::collections::HashSet::new();
     let mut failed: usize = 0;
     let mut skipped: usize = 0;
+    for path in &legacy {
+        eprintln!(
+            "Skipping {}: HWP 5.0 binary format is not supported (save it as .hwpx)",
+            path.display()
+        );
+        skipped += 1;
+    }
     for path in inputs {
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()).map(str::to_owned) else {
             tracing::warn!("Skipping file with non-UTF-8 stem: {:?}", path);
@@ -308,9 +318,14 @@ enum Outcome {
     Failed,
 }
 
-/// Recursively collect `.hwp` / `.hwpx` files under `dir`, skipping hidden
+/// Recursively collect `.hwpx` files under `dir` into `out` (and legacy
+/// `.hwp` files into `legacy`, so they can be reported), skipping hidden
 /// entries and symlinks.
-fn collect_hwp_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) -> Result<()> {
+fn collect_hwpx_files(
+    dir: &std::path::Path,
+    out: &mut Vec<PathBuf>,
+    legacy: &mut Vec<PathBuf>,
+) -> Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -327,7 +342,7 @@ fn collect_hwp_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) -> Result<()
         }
 
         if file_type.is_dir() {
-            if let Err(e) = collect_hwp_files(&path, out) {
+            if let Err(e) = collect_hwpx_files(&path, out, legacy) {
                 eprintln!("Error reading directory {}: {e}", path.display());
             }
             continue;
@@ -342,8 +357,10 @@ fn collect_hwp_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) -> Result<()
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
-        if ext == "hwp" || ext == "hwpx" {
-            out.push(path);
+        match ext.as_str() {
+            "hwpx" => out.push(path),
+            "hwp" => legacy.push(path),
+            _ => {}
         }
     }
     Ok(())

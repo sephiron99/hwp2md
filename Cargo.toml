@@ -3,7 +3,7 @@ name = "hwp2md"
 version = "0.5.0"
 edition = "2021"
 authors = ["Mario Cho <hephaex@gmail.com>"]
-description = "HWP/HWPX ↔ Markdown bidirectional converter"
+description = "HWPX ↔ Markdown bidirectional converter"
 license = "GPL-3.0-only"
 repository = "https://github.com/hephaex/hwp2md"
 homepage = "https://github.com/hephaex/hwp2md"
@@ -29,22 +29,11 @@ name = "hwp2md"
 path = "src/lib.rs"
 
 [dependencies]
-# CFB/OLE2 container (HWP 5.0)
-cfb = "0.14"
-
-# Compression
-flate2 = "1.0"
-
-# AES-128 ECB for HWP distribution document decryption
-aes = "0.8"
-
 # ZIP container (HWPX)
 zip = { version = "2.0", default-features = false, features = ["deflate"] }
 
 # XML parsing (HWPX)
 quick-xml = { version = "0.37", features = ["serialize"] }
-
-byteorder = "1.5"
 
 # Markdown
 comrak = "0.34"

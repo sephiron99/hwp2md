@@ -1,4 +1,4 @@
-use crate::hwp::heading_style::parse_heading_style;
+use crate::heading_style::parse_heading_style;
 use crate::ir::{self, InlineFormat};
 
 use super::context::{
@@ -283,14 +283,10 @@ pub(super) fn handle_end_element(
         }
         "equation" | "hp:equation" | "eqEdit" | "hp:eqEdit" => {
             if !ctx.equation_text.is_empty() {
-                // DESIGN: HWPX equation text is stored verbatim as `tex`, without
-                // calling `eqedit_to_latex`.  This is a policy choice, not a
-                // consequence of HWPX equations already being valid LaTeX — a
-                // Hancom-authored HWPX file can contain EQEDIT script syntax (e.g.
-                // "a over b") that is NOT valid LaTeX.  The HWP 5.0 binary reader
-                // (hwp/convert.rs:464) applies `eqedit_to_latex` because the binary
-                // format's equation storage always uses EQEDIT encoding; HWPX does
-                // not have that guarantee, so we pass text through untransformed.
+                // DESIGN: HWPX equation text is stored verbatim as `tex` without
+                // any EQEDIT → LaTeX conversion.  A Hancom-authored HWPX file can
+                // contain EQEDIT script syntax (e.g. "a over b") that is NOT
+                // valid LaTeX; we pass it through untransformed.
                 // See the integration test `hwpx_equation_eqedit_syntax_stored_verbatim_not_converted`
                 // which pins this behavior.
                 let tex = std::mem::take(&mut ctx.equation_text);

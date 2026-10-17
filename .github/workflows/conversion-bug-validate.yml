@@ -33,7 +33,7 @@ jobs:
           script: |
             const body = context.payload.issue.body || '';
             // Match GitHub-hosted attachment URLs (uploaded files)
-            const urlPattern = /https:\/\/github\.com\/[^\s)]+\.(hwp|hwpx|zip)/gi;
+            const urlPattern = /https:\/\/github\.com\/[^\s)]+\.(hwpx|zip)/gi;
             // Also match user-content URLs
             const userContentPattern = /https:\/\/github\.user-content\.com\/[^\s)]+/gi;
 
@@ -67,7 +67,7 @@ jobs:
               # If ZIP, extract first
               if [[ "$FILENAME" == *.zip ]]; then
                 unzip -o -d /tmp/hwp-validate/extracted "/tmp/hwp-validate/$FILENAME" 2>/dev/null
-                FILES=$(find /tmp/hwp-validate/extracted -name "*.hwp" -o -name "*.hwpx" 2>/dev/null)
+                FILES=$(find /tmp/hwp-validate/extracted -name "*.hwpx" 2>/dev/null)
               else
                 FILES="/tmp/hwp-validate/$FILENAME"
               fi
@@ -114,7 +114,7 @@ jobs:
             let comment = '## 🔍 자동 변환 검증 결과\n\n';
 
             if (count === 0) {
-              comment += '⚠️ 이슈 본문에서 HWP/HWPX 파일 첨부를 찾지 못했습니다.\n';
+              comment += '⚠️ 이슈 본문에서 HWPX 파일 첨부를 찾지 못했습니다.\n';
               comment += '파일을 드래그하여 첨부한 후 `conversion-bug` 라벨을 다시 추가해 주세요.\n';
             } else {
               try {

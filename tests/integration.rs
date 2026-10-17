@@ -4,9 +4,7 @@
 /// builder, writes it to a temporary file, and exercises the library API
 /// (`hwpx::read_hwpx`, `md::write_markdown`, `convert::to_markdown`).
 ///
-/// Binary HWP 5.0 is deliberately excluded: its compound-file-binary format
-/// requires a real HWP runtime to produce valid files.  HWPX (ZIP + XML) is
-/// fully constructable from pure Rust.
+/// HWPX (ZIP + XML) is fully constructable from pure Rust.
 // Make the fixture helpers available as `fixtures::HwpxFixture` etc.
 #[path = "fixtures/mod.rs"]
 mod fixtures;
@@ -637,68 +635,25 @@ fn pyeon_rendered_as_atx_h1_in_markdown() {
 }
 
 // ---------------------------------------------------------------------------
-// 12. DRM-protected HWP file detection
+// 12. Legacy binary .hwp input is rejected with an actionable message
 // ---------------------------------------------------------------------------
 
-fn create_drm_protected_hwp_fixture() -> (tempfile::TempDir, std::path::PathBuf) {
-    use std::io::Write;
-
+#[test]
+fn hwp_input_is_rejected_with_hwpx_hint() {
     let dir = tempfile::tempdir().expect("create tempdir");
-    let path = dir.path().join("drm_protected.hwp");
+    let path = dir.path().join("legacy.hwp");
+    std::fs::write(&path, b"not parsed").expect("write file");
 
-    let file = std::fs::File::create(&path).expect("create file");
-    let mut cfb = cfb::CompoundFile::create(file).expect("create CFB");
-
-    let mut stream = cfb
-        .create_stream("/FileHeader")
-        .expect("create FileHeader stream");
-
-    let mut header_data = [0u8; 256];
-    let sig = b"HWP Document File";
-    header_data[..sig.len()].copy_from_slice(sig);
-    header_data[32] = 0; // version extra
-    header_data[33] = 0; // version micro
-    header_data[34] = 1; // version minor
-    header_data[35] = 5; // version major
-    header_data[36..40].copy_from_slice(&0x10u32.to_le_bytes()); // has_drm
-
-    stream.write_all(&header_data).expect("write FileHeader");
-    drop(stream);
-    cfb.flush().expect("flush CFB");
-    drop(cfb);
-
-    (dir, path)
-}
-
-#[test]
-fn drm_protected_hwp_returns_error() {
-    let (_dir, path) = create_drm_protected_hwp_fixture();
-
-    let result = hwp2md::convert::to_markdown(&path, None, None, false);
-
+    let err = hwp2md::convert::to_markdown(&path, None, None, false)
+        .expect_err(".hwp input must be rejected");
     assert!(
-        result.is_err(),
-        "expected DrmProtected error for encrypted HWP; got Ok"
+        matches!(err, hwp2md::Hwp2MdError::UnsupportedFormat(_)),
+        "expected UnsupportedFormat; got {err:?}"
     );
-
-    if let Err(hwp2md::Hwp2MdError::DrmProtected { path: err_path }) = result {
-        assert_eq!(err_path, path);
-    } else {
-        panic!("expected DrmProtected error variant; got {result:?}");
-    }
-}
-
-#[test]
-fn drm_protected_hwp_error_message_contains_drm() {
-    let (_dir, path) = create_drm_protected_hwp_fixture();
-
-    let result = hwp2md::convert::to_markdown(&path, None, None, false);
-    assert!(result.is_err(), "expected error for DRM-protected file");
-
-    let error_msg = result.unwrap_err().to_string();
+    let msg = err.to_string();
     assert!(
-        error_msg.to_lowercase().contains("drm"),
-        "error message should mention DRM; got: {error_msg:?}"
+        msg.contains(".hwpx"),
+        "message should suggest saving as .hwpx; got: {msg:?}"
     );
 }
 

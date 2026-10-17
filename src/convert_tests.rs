@@ -378,21 +378,32 @@ fn convert_auto_md_to_md_is_rejected() {
 }
 
 #[test]
-fn convert_auto_hwp_to_hwpx_is_rejected() {
-    // .hwp → .hwpx is currently unsupported (writer only emits HWPX from
-    // Markdown).  Auto-detect must surface this as an extension-pair
-    // error rather than attempting a partial conversion.
+fn convert_auto_hwp_input_is_rejected() {
+    // Legacy binary .hwp is not supported in any direction; the error must
+    // point users at HWPX instead of a generic extension-pair message.
+    let dir = tempfile::tempdir().unwrap();
+    for out in ["dest.md", "dest.hwpx"] {
+        let input = dir.path().join("source.hwp");
+        let output = dir.path().join(out);
+        std::fs::write(&input, b"placeholder").unwrap();
+        let msg = convert_auto(&input, &output, true).unwrap_err().to_string();
+        assert!(
+            msg.contains("HWP 5.0") && msg.contains(".hwpx"),
+            "unexpected error for .hwp -> {out}: {msg}"
+        );
+    }
+}
+
+#[test]
+fn check_and_info_reject_hwp() {
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("source.hwp");
-    let output = dir.path().join("dest.hwpx");
     std::fs::write(&input, b"placeholder").unwrap();
-    let result = convert_auto(&input, &output, true);
-    assert!(result.is_err());
-    let msg = format!("{}", result.unwrap_err());
-    assert!(
-        msg.contains("cannot infer conversion direction"),
-        "unexpected error: {msg}"
-    );
+    assert!(check(&input).unwrap_err().to_string().contains("HWP 5.0"));
+    assert!(show_info(&input)
+        .unwrap_err()
+        .to_string()
+        .contains("HWP 5.0"));
 }
 
 #[test]
@@ -484,19 +495,6 @@ fn output_exists_display_includes_path() {
         msg.contains("--force"),
         "display must mention --force: {msg}"
     );
-}
-
-#[test]
-fn drm_protected_display_includes_path() {
-    let err = Hwp2MdError::DrmProtected {
-        path: PathBuf::from("secret.hwp"),
-    };
-    let msg = err.to_string();
-    assert!(
-        msg.contains("secret.hwp"),
-        "display must include path: {msg}"
-    );
-    assert!(msg.contains("DRM"), "display must mention DRM: {msg}");
 }
 
 #[test]

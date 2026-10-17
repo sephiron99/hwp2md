@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **HWP 5.0 binary (`.hwp`) support** — the `hwp` module (CFB/OLE2 reader,
+  record parser, distribution-document decryption, EQEDIT → LaTeX) is gone,
+  along with the `cfb`, `flate2`, `aes` and `byteorder` dependencies and the
+  HWP-only error variants (`HwpParse`, `DrmProtected`, `Decompress`,
+  `DecompressionBomb`, `InvalidRecord`, `Encoding`). `.hwp` input now fails
+  with `UnsupportedFormat` and a hint to save the document as `.hwpx`;
+  `batch` lists `.hwp` files as skipped. **Breaking change.**
+
 ### Added
+- `batch` walks subdirectories recursively and mirrors the directory
+  structure in the output (and `--assets-dir`) tree.
+- `batch` converts files in parallel (rayon).
 - **v0.6.0 spec / Sprint 102**: Configurable table output format — `TableFormat`
   enum (`Html`/`Grid`/`Repeat`) on `ConvertOptions` (`#[non_exhaustive]` +
   `table_format` builder) and a `--table-format html|grid|repeat` flag on the

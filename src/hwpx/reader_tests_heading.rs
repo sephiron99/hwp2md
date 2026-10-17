@@ -1,7 +1,7 @@
 use super::*;
 
 // -----------------------------------------------------------------------
-// parse_heading_style tests — shared implementation from hwp::heading_style
+// parse_heading_style tests — shared implementation from crate::heading_style
 // -----------------------------------------------------------------------
 
 #[test]

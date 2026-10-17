@@ -7,13 +7,13 @@
 
 > [한국어](README.md)
 
-**hwp2md** is a bidirectional converter between Korean Hangul document formats — HWP 5.0 (binary OLE2) and HWPX (XML/ZIP) — and CommonMark-compatible Markdown. It ships as both a command-line tool and a Rust library, making it straightforward to integrate document conversion into build pipelines, static-site generators, or document-management workflows that need to exchange content with the Korean public-sector ecosystem.
+**hwp2md** is a bidirectional converter between the Korean Hangul HWPX document format (XML/ZIP) and CommonMark-compatible Markdown. It ships as both a command-line tool and a Rust library, making it straightforward to integrate document conversion into build pipelines, static-site generators, or document-management workflows that need to exchange content with the Korean public-sector ecosystem.
 
 ## Features
 
-- HWP 5.0 binary format (OLE2/CFB container) to Markdown
 - HWPX (ZIP + XML) to Markdown
-- Markdown to HWPX (write path; binary HWP output is not yet supported)
+- Markdown to HWPX
+- The legacy HWP 5.0 binary format (`.hwp`) is not supported; save such documents as `.hwpx` in Hancom Office first.
 - Headings levels 1-6, paragraphs, bold, italic, underline, strikethrough, inline code
 - Superscript and subscript inline styles
 - Hyperlinks (reader + writer; `fieldBegin`/`fieldEnd` control pattern)
@@ -27,7 +27,7 @@
 - Block quotes
 - Images with alt text; optional extraction to an assets directory
 - Footnotes (`[^id]` syntax)
-- Math expressions — HWP EqEdit equations converted to LaTeX (`$...$` / `$$...$$`)
+- Math blocks (`$...$` / `$$...$$`; HWPX equation scripts are passed through verbatim)
 - Document metadata (title, author, date) optionally emitted as YAML front matter
 - `info` subcommand for quick document inspection without conversion
 - YAML style templates for Markdown-to-HWPX output (page dimensions, margins, fonts, heading line spacing)
@@ -55,20 +55,20 @@ Minimum supported Rust version: **1.88**.
 
 ## CLI Usage
 
-### Convert HWP or HWPX to Markdown
+### Convert HWPX to Markdown
 
 ```bash
 # Write Markdown to stdout
-hwp2md to-md report.hwp
+hwp2md to-md report.hwpx
 
 # Write to a file
-hwp2md to-md report.hwp -o report.md
+hwp2md to-md report.hwpx -o report.md
 
 # Extract embedded images alongside the Markdown
 hwp2md to-md report.hwpx -o report.md --assets-dir ./images
 
 # Include document metadata as YAML front matter
-hwp2md to-md report.hwp -o report.md --frontmatter
+hwp2md to-md report.hwpx -o report.md --frontmatter
 ```
 
 ### Convert Markdown to HWPX
@@ -101,7 +101,8 @@ hwp2md convert report.hwpx report.md --force
 ### Batch convert a directory
 
 ```bash
-# Convert all HWP/HWPX files in a directory (recursively, mirroring subdirectories)
+# Convert all HWPX files in a directory (recursively, mirroring subdirectories)
+# .hwp files are skipped and reported
 hwp2md batch ./reports/ --output-dir converted/
 
 # Extract images into per-file subdirectories
@@ -114,9 +115,9 @@ hwp2md batch ./reports/ -o converted/ --force
 ### Inspect a document without converting
 
 ```bash
-hwp2md info report.hwp
-# File: report.hwp
-# Format: hwp
+hwp2md info report.hwpx
+# File: report.hwpx
+# Format: hwpx
 # Title: Annual Report 2025
 # Author: Jane Doe
 # Sections: 4
@@ -130,8 +131,8 @@ hwp2md info report.hwp
 The `--log-level` flag accepts any `tracing` filter string (default: `info`):
 
 ```bash
-hwp2md --log-level debug to-md report.hwp
-hwp2md --log-level warn  to-md report.hwp -o report.md
+hwp2md --log-level debug to-md report.hwpx
+hwp2md --log-level warn  to-md report.hwpx -o report.md
 ```
 
 ## Library Usage
@@ -149,7 +150,7 @@ hwp2md = "0.5"
 use hwp2md::convert;
 
 fn main() -> anyhow::Result<()> {
-    // HWP or HWPX to Markdown (written to stdout when output is None)
+    // HWPX to Markdown (written to stdout when output is None)
     convert::to_markdown(
         "report.hwpx".as_ref(),
         Some("report.md".as_ref()),
@@ -171,7 +172,7 @@ fn main() -> anyhow::Result<()> {
 ### Work with the intermediate representation
 
 ```rust
-use hwp2md::{hwp, hwpx, md, ir};
+use hwp2md::{hwpx, md, ir};
 
 // Parse a document into the IR
 let doc: ir::Document = hwpx::read_hwpx("report.hwpx".as_ref())?;
@@ -208,40 +209,35 @@ println!("{} sections", doc.sections.len());
 
 ## Format Support Matrix
 
-| Feature | HWP 5.0 -> MD | HWPX -> MD | MD -> HWPX |
-|---------|:---:|:---:|:---:|
-| Headings (H1-H6) | yes | yes | yes |
-| Paragraphs | yes | yes | yes |
-| Bold / Italic | yes | yes | yes |
-| Underline | yes | yes | yes |
-| Strikethrough | yes | yes | yes |
-| Inline code | yes | yes | yes |
-| Superscript / Subscript | yes | yes | yes |
-| Hyperlinks | yes | yes | yes |
-| Ruby annotations | yes | yes | yes |
-| Ordered lists | yes | yes | yes |
-| Unordered lists | yes | yes | yes |
-| Nested lists | yes | yes | yes |
-| Tables | yes | yes | yes |
-| Images (extract) | yes | yes | yes |
-| Fenced code blocks | yes | yes | yes |
-| Block quotes | yes | yes | yes |
-| Footnotes | yes | yes | yes |
-| Math (LaTeX) | yes | yes | yes |
-| YAML front matter | yes | yes | n/a |
-| Multi-column layout | flattened | flattened | n/a |
-| Headers / footers | skipped | yes | yes |
-| DRM-protected HWP | no | no | n/a |
-| MD -> HWP binary | n/a | n/a | no |
+| Feature | HWPX -> MD | MD -> HWPX |
+|---------|:---:|:---:|
+| Headings (H1-H6) | yes | yes |
+| Paragraphs | yes | yes |
+| Bold / Italic | yes | yes |
+| Underline | yes | yes |
+| Strikethrough | yes | yes |
+| Inline code | yes | yes |
+| Superscript / Subscript | yes | yes |
+| Hyperlinks | yes | yes |
+| Ruby annotations | yes | yes |
+| Ordered lists | yes | yes |
+| Unordered lists | yes | yes |
+| Nested lists | yes | yes |
+| Tables | yes | yes |
+| Images (extract) | yes | yes |
+| Fenced code blocks | yes | yes |
+| Block quotes | yes | yes |
+| Footnotes | yes | yes |
+| Math | yes | yes |
+| YAML front matter | yes | n/a |
+| Multi-column layout | flattened | n/a |
+| Headers / footers | yes | yes |
 
 ## Architecture
 
 ```
-HWP 5.0 (.hwp)  ---- hwp::read_hwp()   --+
-                                         +---> ir::Document ---> md::write_markdown() ---> Markdown
-HWPX (.hwpx)    ---- hwpx::read_hwpx() -+
-                                           +-- ir::Document <--- md::parse_markdown() <--- Markdown
-                                           +---> hwpx::write_hwpx() ---> HWPX (.hwpx)
+HWPX (.hwpx) --- hwpx::read_hwpx() ---> ir::Document ---> md::write_markdown() ---> Markdown
+HWPX (.hwpx) <--- hwpx::write_hwpx() <--- ir::Document <--- md::parse_markdown() <--- Markdown
 ```
 
 The conversion pipeline is decoupled through a format-neutral intermediate representation (`ir::Document`). Every reader produces an `ir::Document`; every writer consumes one. This keeps format-specific code isolated and makes it straightforward to add new input or output formats in the future.
@@ -266,7 +262,6 @@ src/
   convert.rs       High-level convert::to_markdown / to_hwpx / show_info
   ir.rs            Intermediate representation types
   error.rs         Hwp2MdError enum (thiserror)
-  hwp/             HWP 5.0 reader (CFB container, record parser, EqEdit)
   hwpx/            HWPX reader + writer (ZIP + quick-xml)
   md/              Markdown parser (comrak) + writer
 tests/             Integration tests
@@ -274,15 +269,13 @@ tests/             Integration tests
 
 ## Known Limitations
 
-- DRM-protected HWP files are not supported.
+- The HWP 5.0 binary format (`.hwp`) is not supported for input or output.
 - Multi-column layouts are flattened to a single column.
 - Tables with non-trivial `colspan`/`rowspan` fall back to raw HTML in the Markdown output.
-- Headers and footers in HWP 5.0 binary files are skipped; HWPX headers/footers are fully supported.
-- Writing back to the binary HWP 5.0 format (MD -> HWP) is not supported; only HWPX output is available.
 
 ## Reporting Conversion Bugs
 
-If `hwp2md` fails to convert your HWP/HWPX file correctly, please [open an issue](https://github.com/hephaex/hwp2md/issues/new?template=conversion-bug.yml) using the **Conversion Bug** template. Attach the file that causes the problem — CI will automatically attempt the conversion and post the result as a comment on your issue.
+If `hwp2md` fails to convert your HWPX file correctly, please [open an issue](https://github.com/hephaex/hwp2md/issues/new?template=conversion-bug.yml) using the **Conversion Bug** template. Attach the file that causes the problem — CI will automatically attempt the conversion and post the result as a comment on your issue.
 
 ## Contributing
 

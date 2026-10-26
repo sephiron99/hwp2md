@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and merge grid lines no cell uses. A table left with one column (a box
   around content) gives its cells' blocks instead. Tables without border
   information (e.g. written by hwp2md itself) are unchanged.
+- HWPX → Markdown: the guide text of an unfilled click-here field (누름틀,
+  `CLICK_HERE` with `dirty≠1`, text still equal to its `Direction` guide —
+  shown greyed on screen and never printed) is left out, in body text,
+  table cells, notes and list items alike. A preset value that differs from
+  the guide (e.g. `0000.00.00.`) is kept.
 - Markdown tables: a line break inside a cell is written as `<br>` instead
   of a raw newline, which broke the row (pipe/grid) or could end the HTML
   block (blank line).

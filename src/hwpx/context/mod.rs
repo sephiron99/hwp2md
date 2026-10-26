@@ -101,6 +101,43 @@ pub(crate) struct ParseContext {
     pub(crate) after_paragraph: Vec<ir::Block>,
     /// Number of OWPML notes seen so far without a `number` attribute.
     pub(crate) unnumbered_notes: u32,
+
+    // ── Fields (누름틀) ──────────────────────────────────────────────
+    /// The `<hp:fieldBegin>` whose parameters are being read.
+    pub(crate) field_begin: Option<FieldBegin>,
+    /// Open fields, innermost last; `Some` for an unfilled click-here field
+    /// with a guide.
+    pub(crate) fields: Vec<Option<GuideMark>>,
+    /// Identifies the open paragraph (unique per `<hp:p>`).
+    pub(crate) para_id: u64,
+    pub(crate) next_para_id: u64,
+}
+
+/// A `<hp:fieldBegin>` being read.
+#[derive(Debug, Default)]
+pub(crate) struct FieldBegin {
+    /// `type="CLICK_HERE"` and not `dirty="1"`: an unfilled click-here field.
+    pub(crate) click_here: bool,
+    /// The first `Direction` parameter (an empty one means no guide).
+    pub(crate) direction: Option<String>,
+    /// The guide inside a `Command` parameter.
+    pub(crate) command_guide: Option<String>,
+    /// Name and text of the `<hp:stringParam>` being read.
+    pub(crate) param: Option<(String, String)>,
+}
+
+/// Where the text of an unfilled click-here field starts.
+///
+/// Top-level text moves into inlines at every `</hp:t>`, while a cell's,
+/// note's or list item's text stays in its text buffer until the paragraph
+/// ends — so both lengths are kept.
+#[derive(Debug)]
+pub(crate) struct GuideMark {
+    guide: String,
+    para_id: u64,
+    /// Lengths of the active inline and text buffers at `<hp:fieldBegin>`.
+    inlines: usize,
+    text: usize,
 }
 
 /// The paragraph-level state of a paragraph whose reading is suspended by a
@@ -117,6 +154,7 @@ pub(crate) struct SavedParagraph {
     max_font_height_bold: bool,
     fmt: FormattingState,
     footnotes: Vec<ir::Block>,
+    para_id: u64,
 }
 
 /// Which child element of a `<hp:ruby>` block is currently being parsed.
@@ -162,6 +200,10 @@ impl Default for ParseContext {
             para_stack: Vec::new(),
             after_paragraph: Vec::new(),
             unnumbered_notes: 0,
+            field_begin: None,
+            fields: Vec::new(),
+            para_id: 0,
+            next_para_id: 0,
         }
     }
 }
@@ -181,6 +223,7 @@ impl ParseContext {
             max_font_height_bold: self.para_max_font_height_bold,
             fmt: std::mem::take(&mut self.fmt),
             footnotes: std::mem::take(&mut self.after_paragraph),
+            para_id: self.para_id,
         }
     }
 
@@ -197,6 +240,7 @@ impl ParseContext {
         self.para_max_font_height = saved.max_font_height;
         self.para_max_font_height_bold = saved.max_font_height_bold;
         self.fmt = saved.fmt;
+        self.para_id = saved.para_id;
         // Footnotes of the inner paragraph (say, a table cell's) follow the
         // outer one.
         let inner = std::mem::replace(&mut self.after_paragraph, saved.footnotes);
@@ -225,19 +269,85 @@ impl ParseContext {
         }
     }
 
+    /// Start a new paragraph's identity.
+    pub(crate) fn new_paragraph_id(&mut self) {
+        self.next_para_id += 1;
+        self.para_id = self.next_para_id;
+    }
+
+    /// The `<hp:fieldBegin>` and its parameters are read: open the field.
+    pub(crate) fn open_field(&mut self) {
+        let Some(begin) = self.field_begin.take() else {
+            return;
+        };
+        let guide = match begin.direction {
+            Some(d) => Some(d).filter(|d| !d.is_empty()),
+            None => begin.command_guide,
+        };
+        let inlines = self.active_inlines().len();
+        let text = self.active_text_buf().len();
+        let mark = guide.filter(|_| begin.click_here).map(|guide| GuideMark {
+            guide,
+            para_id: self.para_id,
+            inlines,
+            text,
+        });
+        self.fields.push(mark);
+    }
+
+    /// `<hp:fieldEnd>`: an unfilled click-here field whose text is still its
+    /// guide (누름틀 안내문) is dropped — Hancom shows it greyed on screen and
+    /// never prints it.  A preset value that differs from the guide stays.
+    pub(crate) fn close_field(&mut self) {
+        let Some(Some(mark)) = self.fields.pop() else {
+            return;
+        };
+        if mark.para_id != self.para_id {
+            return; // the field spans paragraphs: leave it
+        }
+        let buffered = self.active_text_buf().len();
+        let inlines = self.active_inlines();
+        if mark.inlines > inlines.len() || mark.text > buffered {
+            return;
+        }
+        let added = &inlines[mark.inlines..];
+        if added
+            .iter()
+            .any(|i| i.footnote_ref.is_some() || i.ruby.is_some())
+        {
+            return;
+        }
+        if !added.is_empty() && buffered > mark.text {
+            return; // text in both buffers: order unknown, leave it
+        }
+        let mut value: String = added.iter().map(|i| i.text.as_str()).collect();
+        value.push_str(&self.active_text_buf()[mark.text..]);
+        if !value.is_empty() && (value == mark.guide || value.trim_end() == mark.guide) {
+            self.active_inlines().truncate(mark.inlines);
+            self.active_text_buf().truncate(mark.text);
+        }
+    }
+
+    /// The active inline buffer.
+    ///
+    /// Priority: header/footer > footnote > `list_item` > cell > paragraph.
+    fn active_inlines(&mut self) -> &mut Vec<ir::Inline> {
+        if self.header_footer.in_either_active() {
+            &mut self.header_footer.inlines
+        } else if self.footnote.active {
+            &mut self.footnote.inlines
+        } else if self.list.in_item {
+            &mut self.list.item_inlines
+        } else if self.table.in_cell {
+            &mut self.table.cell_inlines
+        } else {
+            &mut self.current_inlines
+        }
+    }
+
     /// Push an inline to the active inline buffer.
     pub(crate) fn push_inline(&mut self, inline: ir::Inline) {
-        if self.header_footer.in_either_active() {
-            self.header_footer.inlines.push(inline);
-        } else if self.footnote.active {
-            self.footnote.inlines.push(inline);
-        } else if self.list.in_item {
-            self.list.item_inlines.push(inline);
-        } else if self.table.in_cell {
-            self.table.cell_inlines.push(inline);
-        } else {
-            self.current_inlines.push(inline);
-        }
+        self.active_inlines().push(inline);
     }
 
     /// Push a block to the active block buffer.

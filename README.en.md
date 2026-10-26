@@ -17,6 +17,7 @@
 - Headings levels 1-6, paragraphs, bold, italic, underline, strikethrough, inline code
 - Superscript and subscript inline styles
 - Hyperlinks (reader + writer; `fieldBegin`/`fieldEnd` control pattern)
+- The guide text of an unfilled click-here field (누름틀), which Hancom never prints, is left out (a preset value that differs from the guide is kept)
 - Ruby annotations (reader + writer; rendered as `<ruby>base<rt>annotation</rt></ruby>`)
 - Footnote references (writer; `hp:noteRef` emission)
 - Inline code mapped to monospace font (Courier New) in HWPX output

@@ -304,3 +304,78 @@ fn eqedit_alias_also_produces_math_block() {
         other => panic!("expected Math, got {other:?}"),
     }
 }
+
+// -----------------------------------------------------------------------
+// Click-here fields (누름틀): unfilled guide text is not printed
+// -----------------------------------------------------------------------
+
+fn paragraph_text(xml: &str) -> String {
+    let s = parse_section_xml(xml).expect("parse");
+    s.blocks
+        .iter()
+        .map(|b| match b {
+            ir::Block::Paragraph { inlines } => inlines.iter().map(|i| i.text.as_str()).collect(),
+            other => format!("{other:?}"),
+        })
+        .collect::<Vec<String>>()
+        .join("|")
+}
+
+fn click_here(dirty: &str, params: &str, text: &str) -> String {
+    format!(
+        concat!(
+            r#"<hp:run><hp:ctrl><hp:fieldBegin type="CLICK_HERE" dirty="{}"><hp:parameters>{}</hp:parameters>"#,
+            r#"</hp:fieldBegin></hp:ctrl><hp:t>{}</hp:t></hp:run><hp:run><hp:ctrl><hp:fieldEnd/></hp:ctrl></hp:run>"#
+        ),
+        dirty, params, text
+    )
+}
+
+#[test]
+fn unfilled_click_here_guide_text_is_dropped() {
+    let direction = r#"<hp:stringParam name="Direction">성명</hp:stringParam>"#;
+    let command = r#"<hp:stringParam name="Command">Clickhere:set:9:Direction:wstring:2:직업 HelpState:wstring:0: </hp:stringParam>"#;
+    let xml = format!(
+        r#"<root><hp:p><hp:run><hp:t>고소인: </hp:t></hp:run>{}<hp:run><hp:t> (</hp:t></hp:run>{}<hp:run><hp:t>)</hp:t></hp:run></hp:p></root>"#,
+        click_here("0", direction, "성명"),
+        click_here("0", command, "직업"),
+    );
+    assert_eq!(paragraph_text(&xml), "고소인:  ()");
+}
+
+#[test]
+fn click_here_text_that_is_not_the_guide_stays() {
+    let direction = r#"<hp:stringParam name="Direction">성명</hp:stringParam>"#;
+    let xml = format!(
+        r#"<root><hp:p>{}{}{}</hp:p></root>"#,
+        // A preset value (no guide, or different from it), and a filled field.
+        click_here(
+            "0",
+            r#"<hp:stringParam name="Command">0000.00.00.;</hp:stringParam>"#,
+            "0000.00.00."
+        ),
+        click_here("0", direction, "홍길동"),
+        click_here("1", direction, "성명"),
+    );
+    assert_eq!(paragraph_text(&xml), "0000.00.00.홍길동성명");
+}
+
+#[test]
+fn click_here_guide_text_in_a_table_cell_is_dropped() {
+    let direction = r#"<hp:stringParam name="Direction">OOO 외 O명</hp:stringParam>"#;
+    let xml = format!(
+        r#"<root><hp:tbl colCnt="1"><hp:tr><hp:tc><hp:subList><hp:p>{}<hp:run><hp:t>에 대한 사건</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></root>"#,
+        click_here("0", direction, "OOO 외 O명"),
+    );
+    let s = parse_section_xml(&xml).expect("parse");
+    let ir::Block::Table { rows, .. } = &s.blocks[0] else {
+        panic!("expected Table, got {:?}", s.blocks);
+    };
+    match &rows[0].cells[0].blocks[..] {
+        [ir::Block::Paragraph { inlines }] => {
+            let text: String = inlines.iter().map(|i| i.text.as_str()).collect();
+            assert_eq!(text, "에 대한 사건");
+        }
+        other => panic!("expected one paragraph, got {other:?}"),
+    }
+}

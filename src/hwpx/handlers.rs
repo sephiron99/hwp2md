@@ -5,7 +5,7 @@ use super::super::table_layout;
 use super::context::{
     apply_charpr_attrs, flush_active_paragraph_scope, flush_cell_paragraph,
     flush_footnote_paragraph, flush_list_item_paragraph, flush_nested_scope,
-    flush_paragraph_staged, CodeLangHint, ParseContext, RubyPart, StagedBlock,
+    flush_paragraph_staged, CodeLangHint, FieldBegin, ParseContext, RubyPart, StagedBlock,
 };
 
 // Handles all XML element parse logic; splitting would lose locality.
@@ -24,6 +24,7 @@ pub(super) fn handle_start_element(
                 let saved = ctx.suspend_paragraph();
                 ctx.para_stack.push(saved);
             }
+            ctx.new_paragraph_id();
             ctx.in_paragraph = true;
             ctx.current_text.clear();
             ctx.current_inlines.clear();
@@ -130,21 +131,15 @@ pub(super) fn handle_start_element(
             ctx.in_equation = true;
             ctx.equation_text.clear();
         }
-        "fieldBegin" | "hp:fieldBegin" => {
-            let mut field_type = String::new();
-            let mut command = String::new();
-            for attr in e.attributes().flatten() {
-                let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
-                let val = attr.unescape_value().unwrap_or_default().to_string();
-                match key {
-                    "type" | "hp:type" => field_type = val,
-                    "command" | "hp:command" => command = val,
-                    _ => {}
-                }
-            }
-            if field_type == "HYPERLINK" && !command.is_empty() {
-                ctx.in_hyperlink = true;
-                ctx.hyperlink_url = Some(command);
+        "fieldBegin" | "hp:fieldBegin" => begin_field(e, ctx),
+        "stringParam" | "hp:stringParam" => {
+            if let Some(begin) = ctx.field_begin.as_mut() {
+                let name = e
+                    .attributes()
+                    .flatten()
+                    .find(|a| a.key.local_name().as_ref() == b"name")
+                    .map(|a| a.unescape_value().unwrap_or_default().to_string());
+                begin.param = name.map(|n| (n, String::new()));
             }
         }
         "ruby" | "hp:ruby" => {
@@ -369,9 +364,26 @@ pub(super) fn handle_end_element(
             }
             ctx.in_equation = false;
         }
+        "stringParam" | "hp:stringParam" => {
+            if let Some(begin) = ctx.field_begin.as_mut() {
+                match begin.param.take() {
+                    Some((name, text)) if name == "Direction" && begin.direction.is_none() => {
+                        begin.direction = Some(text);
+                    }
+                    Some((name, text)) if name == "Command" => {
+                        if let Some(guide) = command_guide(&text) {
+                            begin.command_guide = Some(guide);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        "fieldBegin" | "hp:fieldBegin" => ctx.open_field(),
         "fieldEnd" | "hp:fieldEnd" => {
             ctx.in_hyperlink = false;
             ctx.hyperlink_url = None;
+            ctx.close_field();
         }
         "header" | "hp:header" => {
             ctx.header_footer.in_header = false;
@@ -423,6 +435,10 @@ pub(super) fn handle_end_element(
 }
 
 pub(super) fn handle_text(text: &str, ctx: &mut ParseContext) {
+    if let Some((_, param)) = ctx.field_begin.as_mut().and_then(|b| b.param.as_mut()) {
+        param.push_str(text);
+        return;
+    }
     if ctx.in_equation {
         ctx.equation_text.push_str(text);
         return;
@@ -527,25 +543,13 @@ pub(super) fn handle_empty_element(
         "inMargin" | "hp:inMargin" if ctx.table.active => ctx.table.parse_in_margin(e),
         "charPr" | "hp:charPr" => apply_charpr_attrs(e, ctx),
         "fieldBegin" | "hp:fieldBegin" => {
-            let mut field_type = String::new();
-            let mut command = String::new();
-            for attr in e.attributes().flatten() {
-                let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
-                let val = attr.unescape_value().unwrap_or_default().to_string();
-                match key {
-                    "type" | "hp:type" => field_type = val,
-                    "command" | "hp:command" => command = val,
-                    _ => {}
-                }
-            }
-            if field_type == "HYPERLINK" && !command.is_empty() {
-                ctx.in_hyperlink = true;
-                ctx.hyperlink_url = Some(command);
-            }
+            begin_field(e, ctx);
+            ctx.open_field();
         }
         "fieldEnd" | "hp:fieldEnd" => {
             ctx.in_hyperlink = false;
             ctx.hyperlink_url = None;
+            ctx.close_field();
         }
         "noteRef" | "hp:noteRef" => {
             let mut note_id = String::new();
@@ -598,6 +602,49 @@ pub(super) fn handle_empty_element(
         }
         _ => {}
     }
+}
+
+/// `<hp:fieldBegin>`: a hyperlink starts its link; every field starts
+/// collecting its parameters (read until `</hp:fieldBegin>`).
+fn begin_field(e: &quick_xml::events::BytesStart, ctx: &mut ParseContext) {
+    let mut field_type = String::new();
+    let mut command = String::new();
+    let mut dirty = false;
+    for attr in e.attributes().flatten() {
+        let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
+        let val = attr.unescape_value().unwrap_or_default().to_string();
+        match key {
+            "type" | "hp:type" => field_type = val,
+            "command" | "hp:command" => command = val,
+            "dirty" | "hp:dirty" => dirty = val == "1",
+            _ => {}
+        }
+    }
+    if field_type == "HYPERLINK" && !command.is_empty() {
+        ctx.in_hyperlink = true;
+        ctx.hyperlink_url = Some(command);
+    }
+    ctx.field_begin = Some(FieldBegin {
+        click_here: field_type.eq_ignore_ascii_case("CLICK_HERE") && !dirty,
+        ..FieldBegin::default()
+    });
+}
+
+/// The guide inside a click-here `Command` parameter:
+/// `…Direction:wstring:<n>:<n characters>…`.
+fn command_guide(command: &str) -> Option<String> {
+    const KEY: &str = "Direction:wstring:";
+    let mut rest = command;
+    while let Some(at) = rest.find(KEY) {
+        rest = &rest[at + KEY.len()..];
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 && rest[digits..].starts_with(':') {
+            let n: usize = rest[..digits].parse().ok()?;
+            let guide: String = rest[digits + 1..].chars().take(n).collect();
+            return Some(guide).filter(|g| !g.is_empty());
+        }
+    }
+    None
 }
 
 /// Recognise the `id` attribute of an `<hp:ctrl/>` element that signals a

@@ -229,19 +229,30 @@ fn table_with_spans() -> impl Strategy<Value = Block> {
             }
         });
 
-    let variant_b = safe_text().prop_map(|text| Block::Table {
-        rows: vec![TableRow {
-            cells: vec![TableCell {
-                blocks: vec![Block::Paragraph {
-                    inlines: vec![Inline::plain(&text)],
-                }],
-                colspan: 2,
-                rowspan: 1,
+    // A spanning cell over two cells.  (A table that is only one spanning
+    // cell reads back as text: on screen it is a box, not a grid.)
+    let variant_b = (safe_text(), safe_text(), safe_text()).prop_map(|(a, b, c)| {
+        let make_cell = |text: String, colspan| TableCell {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::plain(&text)],
             }],
-            is_header: true,
-        }],
-        col_count: 2,
-        inner_margin: None,
+            colspan,
+            rowspan: 1,
+        };
+        Block::Table {
+            rows: vec![
+                TableRow {
+                    cells: vec![make_cell(a, 2)],
+                    is_header: true,
+                },
+                TableRow {
+                    cells: vec![make_cell(b, 1), make_cell(c, 1)],
+                    is_header: false,
+                },
+            ],
+            col_count: 2,
+            inner_margin: None,
+        }
     });
 
     prop_oneof![variant_a, variant_b]
@@ -322,11 +333,9 @@ proptest! {
     })]
 
     /// HWPX write→read roundtrip preserves `colspan` and `rowspan` for every
-    /// cell in a 2×2 table.
-    ///
-    /// All cells use `colspan=1, rowspan=1`.  The invariant confirms that the
-    /// HWPX writer encodes span values and the reader decodes them faithfully —
-    /// even when the values are the trivial default.
+    /// cell of a 2-column table: plain 2×2, or a spanning header over two
+    /// cells.  The invariant confirms that the HWPX writer encodes span
+    /// values and the reader decodes them faithfully.
     #[test]
     fn hwpx_table_roundtrip_preserves_spans(table in table_with_spans()) {
         use hwp2md::hwpx::{read_hwpx, write_hwpx};

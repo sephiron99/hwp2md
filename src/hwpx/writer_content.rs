@@ -16,12 +16,7 @@ pub(super) struct ResolvedAsset {
     pub(super) entry_name: String,
     /// Raw bytes of the image.
     pub(super) data: Vec<u8>,
-    /// MIME type (e.g. `"image/png"`).
-    ///
-    /// Stored for consumers of [`collect_image_assets`] (e.g. tests and
-    /// future round-trip extensions) even though the OWPML `<hp:binData>`
-    /// element does not carry a MIME attribute in the current schema.
-    #[allow(dead_code)]
+    /// MIME type (e.g. `"image/png"`), written to the `content.hpf` manifest.
     pub(super) mime_type: String,
 }
 
@@ -363,77 +358,56 @@ pub(super) fn base64_decode(input: &str) -> Result<Vec<u8>, Hwp2MdError> {
 // Static file generators
 // ---------------------------------------------------------------------------
 
+/// `META-INF/container.xml`: points at the package file, as Hancom writes it.
 pub(super) fn generate_container_xml() -> String {
-    r#"<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0">
-  <rootfiles>
-    <rootfile full-path="Contents/content.hpf" media-type="application/hwp+xml"/>
-  </rootfiles>
-</container>"#
-        .to_string()
+    concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>"#,
+        r#"<ocf:container xmlns:ocf="urn:oasis:names:tc:opendocument:xmlns:container" "#,
+        r#"xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf"><ocf:rootfiles>"#,
+        r#"<ocf:rootfile full-path="Contents/content.hpf" media-type="application/hwpml-package+xml"/>"#,
+        r#"</ocf:rootfiles></ocf:container>"#,
+    )
+    .to_string()
 }
 
+/// `version.xml`: the OWPML version the package follows (`HCFVersion`).
 pub(super) fn generate_version_xml() -> String {
-    r#"<?xml version="1.0" encoding="UTF-8"?>
-<hh:HWPCompatibleDocument xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" version="1.1">
-  <hh:DocInfo>
-    <hh:HWPVersion Major="5" Minor="1" Micro="0" Build="0"/>
-  </hh:DocInfo>
-</hh:HWPCompatibleDocument>"#
-        .to_string()
+    format!(
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>"#,
+            r#"<hv:HCFVersion xmlns:hv="http://www.hancom.co.kr/hwpml/2011/version" "#,
+            // `tagetApplication` is Hancom's spelling.
+            r#"tagetApplication="WORDPROCESSOR" major="5" minor="1" micro="0" buildNumber="1" "#,
+            r#"os="1" xmlVersion="1.4" application="hwp2md" appVersion="{}"/>"#,
+        ),
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
+/// `Contents/content.hpf`: the OPF package Hancom reads to find the header,
+/// the sections and the embedded binaries, plus the title and author.
 pub(super) fn generate_content_hpf(
     doc: &ir::Document,
     resolved_assets: &[ResolvedAsset],
 ) -> String {
-    let section_count = doc.sections.len().max(1);
-    let mut items = String::new();
-    for i in 0..section_count {
-        let _ = writeln!(
-            items,
-            "    <hp:item href=\"section{i}.xml\" type=\"Section\"/>"
-        );
-    }
-
-    // Build optional <hp:docInfo> with title/author metadata.
-    let has_title = doc.metadata.title.as_ref().is_some_and(|t| !t.is_empty());
-    let has_author = doc.metadata.author.as_ref().is_some_and(|a| !a.is_empty());
-    let doc_info = if has_title || has_author {
-        let mut info = String::from("  <hp:docInfo>\n");
-        if let Some(title) = doc.metadata.title.as_deref() {
-            if !title.is_empty() {
-                let _ = writeln!(
-                    info,
-                    "    <hp:title>{}</hp:title>",
-                    xml_escape_content(title)
-                );
-            }
-        }
-        if let Some(author) = doc.metadata.author.as_deref() {
-            if !author.is_empty() {
-                let _ = writeln!(
-                    info,
-                    "    <hp:author>{}</hp:author>",
-                    xml_escape_content(author)
-                );
-            }
-        }
-        info.push_str("  </hp:docInfo>\n");
-        info
-    } else {
-        String::new()
+    let non_empty = |v: &Option<String>| {
+        v.as_deref()
+            .filter(|t| !t.is_empty())
+            .map(xml_escape_content)
     };
+    let title = non_empty(&doc.metadata.title).map_or_else(
+        || "<opf:title/>".to_string(),
+        |t| format!("<opf:title>{t}</opf:title>"),
+    );
+    let creator = non_empty(&doc.metadata.author)
+        .map(|a| format!(r#"<opf:meta name="creator" content="text">{a}</opf:meta>"#))
+        .unwrap_or_default();
 
-    // Emit <hp:binData> manifest entries for each embedded asset.
-    //
-    // The OWPML packageInfo schema expects:
-    //   <hp:binData itemId="<basename_no_ext>" file="BinData/<filename>"
-    //               type="EMBED" compress="true"/>
-    //
-    // The `itemId` is the bare stem (without extension) so that readers can
-    // locate the entry when they see a `binaryItemIDRef` in section XML.
-    let mut bin_data_entries = String::new();
+    let section_count = doc.sections.len().max(1);
+    let mut manifest = String::from(
+        r#"<opf:item id="header" href="Contents/header.xml" media-type="application/xml"/>"#,
+    );
+    // Each embedded binary: its id is the name section XML refers to.
     for asset in resolved_assets {
         let item_id = std::path::Path::new(&asset.entry_name)
             .file_stem()
@@ -441,21 +415,39 @@ pub(super) fn generate_content_hpf(
                 || asset.entry_name.clone(),
                 |s| s.to_string_lossy().into_owned(),
             );
-        let _ = writeln!(
-            bin_data_entries,
-            "    <hp:binData itemId=\"{}\" file=\"BinData/{}\" type=\"EMBED\" compress=\"true\"/>",
+        let _ = write!(
+            manifest,
+            r#"<opf:item id="{}" href="BinData/{}" media-type="{}" isEmbeded="1"/>"#,
             xml_escape_content(&item_id),
             xml_escape_content(&asset.entry_name),
+            asset.mime_type,
         );
+    }
+    let mut spine = String::from(r#"<opf:itemref idref="header" linear="no"/>"#);
+    for i in 0..section_count {
+        let _ = write!(
+            manifest,
+            r#"<opf:item id="section{i}" href="Contents/section{i}.xml" media-type="application/xml"/>"#
+        );
+        let _ = write!(spine, r#"<opf:itemref idref="section{i}" linear="yes"/>"#);
     }
 
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<hp:HWPMLPackage xmlns:hp="http://www.hancom.co.kr/hwpml/2011/packageInfo">
-  <hp:compatibledocument version="1.1"/>
-{doc_info}  <hp:contents>
-{items}  </hp:contents>
-{bin_data_entries}</hp:HWPMLPackage>"#
+        concat!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>"#,
+            "\n",
+            r#"<opf:package xmlns:opf="http://www.idpf.org/2007/opf/" "#,
+            r#"xmlns:hpf="http://www.hancom.co.kr/schema/2011/hpf" "#,
+            r#"xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head" version="" unique-identifier="" id="">"#,
+            "<opf:metadata>{title}<opf:language>ko</opf:language>{creator}</opf:metadata>",
+            "<opf:manifest>{manifest}</opf:manifest>",
+            "<opf:spine>{spine}</opf:spine>",
+            "</opf:package>",
+        ),
+        title = title,
+        creator = creator,
+        manifest = manifest,
+        spine = spine,
     )
 }
 

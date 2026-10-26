@@ -181,7 +181,7 @@ fn write_border_fills<W: Write>(
         let mut border = BytesStart::new(*border_name);
         border.push_attribute(("type", "NONE"));
         border.push_attribute(("width", "0.12 mm"));
-        border.push_attribute(("color", "000000"));
+        border.push_attribute(("color", "#000000"));
         w.write_event(Event::Empty(border))?;
     }
 
@@ -217,7 +217,7 @@ fn write_border_fills<W: Write>(
         let mut border = BytesStart::new(*border_name);
         border.push_attribute(("type", "SOLID"));
         border.push_attribute(("width", "0.12 mm"));
-        border.push_attribute(("color", "000000"));
+        border.push_attribute(("color", "#000000"));
         w.write_event(Event::Empty(border))?;
     }
 

@@ -40,6 +40,15 @@ pub fn read_hwpx(path: &Path) -> Result<ir::Document, Hwp2MdError> {
     if let Ok(metadata) = parse_metadata(&header_xml) {
         doc.metadata = metadata;
     }
+    // Hancom keeps the title and author in the OPF package (content.hpf).
+    if let Ok(package) = read_zip_entry(&mut archive, "Contents/content.hpf") {
+        let from_package = parse_package_metadata(&package);
+        let m = &mut doc.metadata;
+        m.title = m.title.take().or(from_package.title);
+        m.author = m.author.take().or(from_package.author);
+        m.subject = m.subject.take().or(from_package.subject);
+        m.description = m.description.take().or(from_package.description);
+    }
     let face_names = parse_face_names(&header_xml);
     let border_fills = super::table_layout::parse_border_fills(&header_xml);
     let break_setting = parse_break_setting(&header_xml);
@@ -146,6 +155,53 @@ fn resolve_block_bin_refs(block: &mut ir::Block, bin_map: &HashMap<String, Strin
 /// or the XML contains none of the recognised elements.
 // Result return keeps consistent Result interface for the handler dispatch table.
 #[allow(clippy::unnecessary_wraps)]
+/// Title, author, subject and description from the `<opf:metadata>` of
+/// `content.hpf`: `<opf:title>` and `<opf:meta name="creator|subject|description">`.
+/// Empty values are ignored.
+pub(crate) fn parse_package_metadata(xml: &str) -> ir::Metadata {
+    let mut meta = ir::Metadata::default();
+    let mut reader = Reader::from_str(xml);
+    let mut buf = Vec::new();
+    let mut field: Option<&'static str> = None;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                field = match e.local_name().as_ref() {
+                    b"title" => Some("title"),
+                    b"meta" => e
+                        .attributes()
+                        .flatten()
+                        .find(|a| a.key.local_name().as_ref() == b"name")
+                        .and_then(|a| match a.value.as_ref() {
+                            b"creator" => Some("author"),
+                            b"subject" => Some("subject"),
+                            b"description" => Some("description"),
+                            _ => None,
+                        }),
+                    _ => None,
+                };
+            }
+            Ok(Event::Text(e)) => {
+                let text = e.unescape().unwrap_or_default().trim().to_string();
+                if !text.is_empty() {
+                    match field.take() {
+                        Some("title") => meta.title = Some(text),
+                        Some("author") => meta.author = Some(text),
+                        Some("subject") => meta.subject = Some(text),
+                        Some("description") => meta.description = Some(text),
+                        _ => {}
+                    }
+                }
+            }
+            Ok(Event::End(_)) => field = None,
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    meta
+}
+
 fn parse_metadata(xml: &str) -> Result<ir::Metadata, Hwp2MdError> {
     let mut meta = ir::Metadata::default();
 

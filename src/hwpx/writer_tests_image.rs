@@ -364,16 +364,10 @@ fn write_hwpx_content_hpf_has_bindata_manifest_entry() {
     let hpf = read_zip_entry_text(&doc, "Contents/content.hpf");
 
     assert!(
-        hpf.contains("hp:binData"),
-        "content.hpf must contain <hp:binData> element; hpf:\n{hpf}"
-    );
-    assert!(
-        hpf.contains("logo.png"),
-        "content.hpf binData must reference logo.png; hpf:\n{hpf}"
-    );
-    assert!(
-        hpf.contains(r#"type="EMBED""#),
-        "content.hpf binData must have type=\"EMBED\"; hpf:\n{hpf}"
+        hpf.contains(
+            r#"<opf:item id="logo" href="BinData/logo.png" media-type="image/png" isEmbeded="1"/>"#
+        ),
+        "content.hpf manifest must list the embedded image; hpf:\n{hpf}"
     );
 }
 

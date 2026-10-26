@@ -58,6 +58,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dropped (HTML tables). `<br>` in other inline text is a line break too.
 - HWPX writer: a line break in text is written as `<hp:lineBreak/>` instead
   of a raw newline inside `<hp:t>`.
+- HWPX writer: Hancom froze opening files written by hwp2md.
+  `Contents/content.hpf`, `META-INF/container.xml` and `version.xml` used a
+  layout of their own; they now follow Hancom's (OPF package with manifest
+  and spine, OCF container, `HCFVersion`). The title and author go to the
+  OPF metadata, and the reader reads them from there as well — they did not
+  round-trip before, and a Hancom document's own title and author were not
+  read. (The HWPX validator used in the tests could not find the sections in
+  the old package, so it had checked almost nothing; it now checks the
+  sections, and the writer's known OWPML deviations are listed in the tests.)
+- HWPX writer: table cells now look like Hancom's. Every `<hp:tc>` carries
+  `name`/`header`/`hasMargin`/`protect`/`editable`/`dirty` and
+  `borderFillIDRef` (the solid border fill) — Hancom draws a cell's lines
+  from the cell's own fill, so cells had no lines before. `<hp:subList>` comes
+  first in the cell, border colours are `#000000`, and `cellAddr` gives the
+  cell's grid column (it was the cell's index in its row, wrong after a
+  merged cell). Because the cells now carry border information, reading such
+  a file back applies the visible-table rules: a one-column table, or one
+  that is a single spanning cell, comes back as its text.
 - HWPX: a paragraph holding a footnote lost all of its text before the note.
   Hancom's `<hp:footNote>`/`<hp:endNote>` (inside `<hp:ctrl>`) were not read
   as notes, and any paragraph nested in a paragraph (a note, table cell or

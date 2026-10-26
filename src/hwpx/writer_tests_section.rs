@@ -235,7 +235,7 @@ fn section_xml_table_2x2() {
     );
     assert!(xml.contains("</hp:tbl>"), "tbl close: {xml}");
     assert_eq!(xml.matches("<hp:tr>").count(), 2, "two rows: {xml}");
-    assert_eq!(xml.matches("<hp:tc>").count(), 4, "four cells: {xml}");
+    assert_eq!(xml.matches("<hp:tc ").count(), 4, "four cells: {xml}");
     assert!(xml.contains('A'), "{xml}");
     assert!(xml.contains('D'), "{xml}");
 }
@@ -257,7 +257,7 @@ fn section_xml_table_colspan_rowspan_present() {
         }],
         inner_margin: None,
     }]);
-    assert!(xml.contains("<hp:tc>"), "plain tc emitted: {xml}");
+    assert!(xml.contains("<hp:tc "), "tc emitted: {xml}");
     assert!(
         xml.contains("colSpan=\"2\""),
         "colSpan should appear: {xml}"
@@ -289,7 +289,7 @@ fn section_xml_table_no_celladdr_for_1x1() {
         }],
         inner_margin: None,
     }]);
-    assert!(xml.contains("<hp:tc>"), "tc emitted: {xml}");
+    assert!(xml.contains("<hp:tc "), "tc emitted: {xml}");
     assert!(
         xml.contains("<hp:cellAddr "),
         "cellAddr must appear for all cells: {xml}"

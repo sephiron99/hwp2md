@@ -457,6 +457,11 @@ fn write_table<W: Write>(
     pos.push_attribute(("treatAsChar", "1"));
     writer.write_event(Event::Empty(pos))?;
 
+    // Grid positions already taken by cells spanning down from rows above:
+    // `cellAddr` names a cell's grid column, not its index in the row.
+    let mut taken: Vec<Vec<bool>> = vec![Vec::new(); rows.len()];
+    let border_fill = tables.table_border_fill_id.to_string();
+
     for (row_idx, row) in rows.iter().enumerate() {
         let row_idx_str = row_idx.to_string();
         writer.write_event(Event::Start(BytesStart::new("hp:tr")))?;
@@ -466,14 +471,46 @@ fn write_table<W: Write>(
         tr_height.push_attribute(("value", cell_height_str.as_str()));
         writer.write_event(Event::Empty(tr_height))?;
 
-        for (col_idx, cell) in row.cells.iter().enumerate() {
-            let col_idx_str = col_idx.to_string();
+        let mut col = 0usize;
+        for cell in &row.cells {
+            while taken[row_idx].get(col).copied().unwrap_or(false) {
+                col += 1;
+            }
+            let colspan = cell.colspan.max(1) as usize;
+            let rowspan = (cell.rowspan.max(1) as usize).min(rows.len() - row_idx);
+            for line in taken.iter_mut().skip(row_idx).take(rowspan) {
+                if line.len() < col + colspan {
+                    line.resize(col + colspan, false);
+                }
+                line[col..col + colspan].fill(true);
+            }
+            let col_idx_str = col.to_string();
+            col += colspan;
             let colspan_str = cell.colspan.to_string();
             let rowspan_str = cell.rowspan.to_string();
 
-            writer.write_event(Event::Start(BytesStart::new("hp:tc")))?;
+            // Hancom draws each cell's lines from its own `borderFillIDRef`
+            // (the table's does not draw cells), so every cell names the
+            // solid border fill.
+            let mut tc = BytesStart::new("hp:tc");
+            tc.push_attribute(("name", ""));
+            tc.push_attribute(("header", if row.is_header { "1" } else { "0" }));
+            tc.push_attribute(("hasMargin", "0"));
+            tc.push_attribute(("protect", "0"));
+            tc.push_attribute(("editable", "0"));
+            tc.push_attribute(("dirty", "0"));
+            tc.push_attribute(("borderFillIDRef", border_fill.as_str()));
+            writer.write_event(Event::Start(tc))?;
 
-            // <hp:cellAddr> — cell position
+            // <hp:subList> — cell content (paragraphs); first, as Hancom
+            // writes it.
+            writer.write_event(Event::Start(BytesStart::new("hp:subList")))?;
+            for b in &cell.blocks {
+                write_block(writer, b, tables, para_id, quote_depth, asset_map)?;
+            }
+            writer.write_event(Event::End(BytesEnd::new("hp:subList")))?;
+
+            // <hp:cellAddr> — cell position on the grid
             let mut cell_addr = BytesStart::new("hp:cellAddr");
             cell_addr.push_attribute(("colAddr", col_idx_str.as_str()));
             cell_addr.push_attribute(("rowAddr", row_idx_str.as_str()));
@@ -500,13 +537,6 @@ fn write_table<W: Write>(
             cell_margin.push_attribute(("top", TABLE_CELL_PAD_V));
             cell_margin.push_attribute(("bottom", TABLE_CELL_PAD_V));
             writer.write_event(Event::Empty(cell_margin))?;
-
-            // <hp:subList> — cell content (paragraphs)
-            writer.write_event(Event::Start(BytesStart::new("hp:subList")))?;
-            for b in &cell.blocks {
-                write_block(writer, b, tables, para_id, quote_depth, asset_map)?;
-            }
-            writer.write_event(Event::End(BytesEnd::new("hp:subList")))?;
 
             writer.write_event(Event::End(BytesEnd::new("hp:tc")))?;
         }

@@ -342,11 +342,9 @@ fn full_roundtrip_bold_italic_combined_text_preserved() {
 // D-1-13: Metadata — content body survives even when metadata is set
 // -----------------------------------------------------------------------
 
-/// The HWPX writer stores title/author in `content.hpf`; the reader parses
-/// metadata from `header.xml`.  These are different files so title/author
-/// does not round-trip through HWPX in the current implementation.
-/// This test verifies that the document body still survives correctly when
-/// metadata fields are populated, and documents the current known limitation.
+/// The HWPX writer stores title/author in the OPF metadata of `content.hpf`,
+/// where Hancom keeps them, and the reader reads them back from there.  The
+/// document body survives alongside.
 #[test]
 fn full_roundtrip_metadata_document_body_survives_with_metadata_set() {
     let doc = ir::Document {
@@ -386,9 +384,16 @@ fn full_roundtrip_metadata_document_body_survives_with_metadata_set() {
         "paragraph text lost when metadata is set; got: {text:?}"
     );
 
-    // Document this known limitation: metadata written to content.hpf is
-    // not parsed back from header.xml by the current reader implementation.
-    // This is intentional — no assertion on metadata fields here.
+    assert_eq!(
+        read_back.metadata.title.as_deref(),
+        Some("Roundtrip Document"),
+        "title round-trips through content.hpf"
+    );
+    assert_eq!(
+        read_back.metadata.author.as_deref(),
+        Some("Test Writer"),
+        "author round-trips through content.hpf"
+    );
     assert_eq!(
         read_back.sections.len(),
         1,

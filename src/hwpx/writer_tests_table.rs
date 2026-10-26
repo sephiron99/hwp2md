@@ -497,13 +497,14 @@ fn write_table_default_inner_margin_when_none() {
 #[test]
 fn write_table_inner_margin_roundtrip() {
     use ir::TableInnerMargin;
-    let rows = vec![text_row(&["Hello"], false)];
+    // Two columns: a one-column table reads back as its text (a box).
+    let rows = vec![text_row(&["Hello", "World"], false)];
     let doc = Document {
         metadata: Metadata::default(),
         sections: vec![Section {
             blocks: vec![Block::Table {
                 rows,
-                col_count: 1,
+                col_count: 2,
                 inner_margin: Some(TableInnerMargin {
                     left: 300,
                     right: 300,
@@ -544,13 +545,14 @@ fn write_table_inner_margin_roundtrip() {
 #[test]
 fn write_table_asymmetric_inner_margin_roundtrip() {
     use ir::TableInnerMargin;
-    let rows = vec![text_row(&["X"], false)];
+    // Two columns: a one-column table reads back as its text (a box).
+    let rows = vec![text_row(&["X", "Y"], false)];
     let doc = Document {
         metadata: Metadata::default(),
         sections: vec![Section {
             blocks: vec![Block::Table {
                 rows,
-                col_count: 1,
+                col_count: 2,
                 inner_margin: Some(TableInnerMargin {
                     left: 11,
                     right: 22,
@@ -582,4 +584,74 @@ fn write_table_asymmetric_inner_margin_roundtrip() {
     assert_eq!(m.right, 22, "roundtrip right");
     assert_eq!(m.top, 33, "roundtrip top");
     assert_eq!(m.bottom, 44, "roundtrip bottom");
+}
+
+/// Every cell carries Hancom's attributes, names the solid border fill (the
+/// table's own `borderFillIDRef` does not draw cells), lists `<hp:subList>`
+/// first, and gives its grid column in `cellAddr` — past cells spanning
+/// from the left or from rows above.
+#[test]
+fn write_table_cells_like_hancom() {
+    let span = |text: &str, colspan, rowspan| ir::TableCell {
+        colspan,
+        rowspan,
+        ..text_cell(text)
+    };
+    // | A (2 rows) | B (2 cols)  |
+    // |            | C   | D     |
+    let rows = vec![
+        ir::TableRow {
+            cells: vec![span("A", 1, 2), span("B", 2, 1)],
+            is_header: true,
+        },
+        ir::TableRow {
+            cells: vec![text_cell("C"), text_cell("D")],
+            is_header: false,
+        },
+    ];
+    let doc = table_doc(rows);
+    let tables = RefTables::build(&doc, None);
+    let xml = generate_section_xml(&doc.sections[0], 0, &tables, &ImageAssetMap::new())
+        .expect("generate_section_xml failed");
+
+    assert!(
+        xml.contains(r#"<hp:tc name="" header="1" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="2">"#),
+        "header-row cell attributes: {xml}"
+    );
+    assert_eq!(
+        xml.matches(r#"dirty="0" borderFillIDRef="2">"#).count(),
+        4,
+        "every cell names the border fill: {xml}"
+    );
+    let tc = xml.find("<hp:tc ").expect("tc");
+    let sub = xml[tc..].find("<hp:subList").expect("subList");
+    let addr = xml[tc..].find("<hp:cellAddr").expect("cellAddr");
+    assert!(sub < addr, "subList comes before cellAddr: {xml}");
+    for (col, row, text) in [(0, 0, "A"), (1, 0, "B"), (1, 1, "C"), (2, 1, "D")] {
+        let at = xml
+            .find(&format!("<hp:t>{text}</hp:t>"))
+            .expect("cell text");
+        let addr = &xml[at..xml[at..].find("/>").map(|e| at + e).expect("addr end")];
+        assert!(
+            xml[at..].contains(&format!(r#"colAddr="{col}" rowAddr="{row}""#))
+                && xml[at..].find(&format!(r#"colAddr="{col}" rowAddr="{row}""#))
+                    < xml[at..].find("</hp:tc>"),
+            "cell {text} must be at column {col}, row {row}: {addr}"
+        );
+    }
+}
+
+/// A one-column table written by hwp2md reads back as its text, like a box
+/// in a Hancom document.
+#[test]
+fn one_column_table_reads_back_as_text() {
+    let doc = table_doc(vec![text_row(&["상자 글"], false)]);
+    let tmp = tempfile::NamedTempFile::new().expect("tmp file");
+    write_hwpx(&doc, tmp.path(), None).expect("write_hwpx");
+    let back = read_hwpx(tmp.path()).expect("read_hwpx");
+    let blocks = &back.sections[0].blocks;
+    assert!(
+        matches!(&blocks[..], [Block::Paragraph { inlines }] if inlines[0].text == "상자 글"),
+        "expected the box's paragraph: {blocks:?}"
+    );
 }

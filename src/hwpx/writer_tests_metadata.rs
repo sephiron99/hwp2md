@@ -324,18 +324,21 @@ fn content_hpf_with_title_and_author() {
     let hpf = generate_content_hpf(&doc, &[]);
 
     assert!(
-        hpf.contains("<hp:docInfo>"),
-        "docInfo section must be present: {hpf}"
+        hpf.contains("<opf:metadata>"),
+        "OPF metadata must be present: {hpf}"
     );
     assert!(
-        hpf.contains("<hp:title>Test Title</hp:title>"),
+        hpf.contains("<opf:title>Test Title</opf:title>"),
         "title must be present: {hpf}"
     );
     assert!(
-        hpf.contains("<hp:author>Test Author</hp:author>"),
+        hpf.contains(r#"<opf:meta name="creator" content="text">Test Author</opf:meta>"#),
         "author must be present: {hpf}"
     );
-    assert!(hpf.contains("</hp:docInfo>"), "docInfo closing tag: {hpf}");
+    assert!(
+        hpf.contains("</opf:metadata>"),
+        "metadata closing tag: {hpf}"
+    );
 }
 
 #[test]
@@ -344,8 +347,8 @@ fn content_hpf_without_metadata_has_no_docinfo() {
     let hpf = generate_content_hpf(&doc, &[]);
 
     assert!(
-        !hpf.contains("<hp:docInfo>"),
-        "docInfo must NOT appear when metadata is empty: {hpf}"
+        hpf.contains("<opf:title/>") && !hpf.contains(r#"name="creator""#),
+        "no title text and no creator when metadata is empty: {hpf}"
     );
 }
 
@@ -362,11 +365,11 @@ fn content_hpf_title_only() {
     let hpf = generate_content_hpf(&doc, &[]);
 
     assert!(
-        hpf.contains("<hp:title>Only Title</hp:title>"),
+        hpf.contains("<opf:title>Only Title</opf:title>"),
         "title: {hpf}"
     );
     assert!(
-        !hpf.contains("<hp:author>"),
+        !hpf.contains(r#"name="creator""#),
         "author must NOT appear when absent: {hpf}"
     );
 }
@@ -383,9 +386,9 @@ fn content_hpf_author_only() {
     };
     let hpf = generate_content_hpf(&doc, &[]);
 
-    assert!(!hpf.contains("<hp:title>"), "title must NOT appear: {hpf}");
+    assert!(hpf.contains("<opf:title/>"), "title must be empty: {hpf}");
     assert!(
-        hpf.contains("<hp:author>Only Author</hp:author>"),
+        hpf.contains(r#"<opf:meta name="creator" content="text">Only Author</opf:meta>"#),
         "author: {hpf}"
     );
 }
@@ -443,11 +446,11 @@ fn write_hwpx_metadata_in_content_hpf() {
     entry.read_to_string(&mut content).expect("read");
 
     assert!(
-        content.contains("<hp:title>HWPX Title</hp:title>"),
+        content.contains("<opf:title>HWPX Title</opf:title>"),
         "title in content.hpf: {content}"
     );
     assert!(
-        content.contains("<hp:author>HWPX Author</hp:author>"),
+        content.contains(r#"<opf:meta name="creator" content="text">HWPX Author</opf:meta>"#),
         "author in content.hpf: {content}"
     );
 }

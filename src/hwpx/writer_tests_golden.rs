@@ -203,7 +203,7 @@ fn golden_comprehensive_document_structure() {
         "table must contain <hp:tr> rows:\n{section_xml}"
     );
     assert!(
-        section_xml.contains("<hp:tc>"),
+        section_xml.contains("<hp:tc "),
         "table must contain <hp:tc> cells:\n{section_xml}"
     );
     assert!(
@@ -260,11 +260,11 @@ fn golden_comprehensive_document_structure() {
         "content.hpf must reference section0.xml:\n{content_hpf}"
     );
     assert!(
-        content_hpf.contains("<hp:title>Golden Test Doc</hp:title>"),
+        content_hpf.contains("<opf:title>Golden Test Doc</opf:title>"),
         "content.hpf must contain document title:\n{content_hpf}"
     );
     assert!(
-        content_hpf.contains("<hp:author>Test Author</hp:author>"),
+        content_hpf.contains(r#"<opf:meta name="creator" content="text">Test Author</opf:meta>"#),
         "content.hpf must contain document author:\n{content_hpf}"
     );
 

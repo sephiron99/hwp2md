@@ -1,0 +1,16 @@
+[package]
+name = "kordoc-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-only"
+description = "Compare hwp2md and kordoc HWPX → Markdown output on a local corpus"
+
+[dependencies]
+hwp2md = { path = "../.." }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+quick-xml = "0.37"
+zip = { version = "2.0", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

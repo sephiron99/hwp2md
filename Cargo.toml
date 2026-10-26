@@ -18,7 +18,12 @@ exclude = [
     "PLAN.md",
     "PROGRESS.md",
     "tests/fixtures/",
+    "tools/",
 ]
+
+[workspace]
+# Root package stays the default member: plain `cargo build/test` only touch hwp2md.
+members = ["tools/kordoc-bench"]
 
 [[bin]]
 name = "hwp2md"

@@ -330,7 +330,9 @@ fn write_table(
 
     let has_complex = rows
         .iter()
-        .any(|r| r.cells.iter().any(|c| c.colspan > 1 || c.rowspan > 1));
+        .any(|r| r.cells.iter().any(|c| c.colspan > 1 || c.rowspan > 1))
+        // A pipe table cannot hold a table; HTML can.
+        || has_nested_table(rows);
 
     match table_format {
         TableFormat::Html => {
@@ -392,7 +394,7 @@ fn write_html_table(out: &mut String, rows: &[ir::TableRow], table_format: Table
             if cell.rowspan > 1 {
                 let _ = write!(attrs, " rowspan=\"{}\"", cell.rowspan);
             }
-            let text = escape_html(&cell_to_text(cell, table_format));
+            let text = cell_to_html(cell, table_format);
             let _ = writeln!(out, "    <{tag}{attrs}>{text}</{tag}>");
         }
         out.push_str("  </tr>\n");
@@ -642,15 +644,68 @@ fn write_repeat_table(
     out.push('\n');
 }
 
-fn cell_to_text(cell: &ir::TableCell, table_format: TableFormat) -> String {
-    let mut texts = Vec::new();
+fn has_nested_table(rows: &[ir::TableRow]) -> bool {
+    rows.iter().any(|r| {
+        r.cells.iter().any(|c| {
+            c.blocks
+                .iter()
+                .any(|b| matches!(b, ir::Block::Table { .. }))
+        })
+    })
+}
+
+/// A cell of an HTML table: its text escaped, and any table inside it
+/// written as a nested `<table>` in place.
+fn cell_to_html(cell: &ir::TableCell, table_format: TableFormat) -> String {
+    let mut parts = Vec::new();
+    let mut text_run: Vec<ir::Block> = Vec::new();
+    let flush_text = |run: &mut Vec<ir::Block>, parts: &mut Vec<String>| {
+        if run.is_empty() {
+            return;
+        }
+        let text = blocks_to_text(run, table_format).replace('|', "\\|");
+        run.clear();
+        if !text.is_empty() {
+            parts.push(escape_html(&text));
+        }
+    };
     for block in &cell.blocks {
+        if let ir::Block::Table { rows, .. } = block {
+            flush_text(&mut text_run, &mut parts);
+            let mut nested = String::new();
+            write_html_table(&mut nested, rows, table_format);
+            // No blank line inside: it would end the Markdown HTML block.
+            parts.push(nested.trim_end().to_string());
+        } else {
+            text_run.push(block.clone());
+        }
+    }
+    flush_text(&mut text_run, &mut parts);
+    parts.join(" ")
+}
+
+fn cell_to_text(cell: &ir::TableCell, table_format: TableFormat) -> String {
+    blocks_to_text(&cell.blocks, table_format).replace('|', "\\|")
+}
+
+/// The text of a cell's blocks on one line.  A table inside (only met
+/// outside HTML output, which nests it instead) becomes its cells' text.
+fn blocks_to_text(blocks: &[ir::Block], table_format: TableFormat) -> String {
+    let mut texts = Vec::new();
+    for block in blocks {
         match block {
             ir::Block::Paragraph { inlines } => {
                 texts.push(render_inlines(inlines));
             }
+            ir::Block::Table { rows, .. } => {
+                let cells = rows.iter().flat_map(|r| &r.cells);
+                let text: Vec<String> = cells
+                    .map(|c| blocks_to_text(&c.blocks, table_format))
+                    .filter(|t| !t.is_empty())
+                    .collect();
+                texts.push(text.join(" "));
+            }
             ir::Block::Heading { .. }
-            | ir::Block::Table { .. }
             | ir::Block::CodeBlock { .. }
             | ir::Block::BlockQuote { .. }
             | ir::Block::List { .. }
@@ -665,7 +720,7 @@ fn cell_to_text(cell: &ir::TableCell, table_format: TableFormat) -> String {
             }
         }
     }
-    texts.join(" ").replace('|', "\\|")
+    texts.join(" ")
 }
 
 fn write_list(

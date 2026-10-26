@@ -60,11 +60,18 @@ pub(super) fn handle_start_element(
             ctx.in_text = true;
         }
         "tbl" | "hp:tbl" => {
-            // Text before a table in the same paragraph comes before it.
-            if ctx.in_paragraph && ctx.at_top_level() {
+            // Text before a table in the same paragraph (top level or a
+            // cell's) comes before it.
+            if ctx.in_paragraph {
                 if let Some(before) = flush_active_paragraph_scope(ctx) {
                     staged.push(before);
                 }
+            }
+            // A table inside another one: set the outer table aside until
+            // this one ends.
+            if ctx.table.active {
+                let outer = std::mem::take(&mut ctx.table);
+                ctx.table_stack.push(outer);
             }
             ctx.table.active = true;
             ctx.table.rows.clear();
@@ -274,15 +281,22 @@ pub(super) fn handle_end_element(
                     .unwrap_or(0),
             );
             let inner_margin = ctx.table.inner_margin.take();
-            if !ctx.table.rows.is_empty() {
-                let rows = std::mem::take(&mut ctx.table.rows);
-                staged.push(StagedBlock::Plain(ir::Block::Table {
-                    rows,
-                    col_count,
-                    inner_margin,
-                }));
-            }
+            let rows = std::mem::take(&mut ctx.table.rows);
             ctx.table.active = false;
+            let table = (!rows.is_empty()).then_some(ir::Block::Table {
+                rows,
+                col_count,
+                inner_margin,
+            });
+            if let Some(outer) = ctx.table_stack.pop() {
+                // Back in the outer table; this one belongs to its open cell.
+                ctx.table = outer;
+                if let Some(block) = table.and_then(|t| ctx.push_block_scoped(t)) {
+                    staged.push(StagedBlock::Plain(block));
+                }
+            } else if let Some(table) = table {
+                staged.push(StagedBlock::Plain(table));
+            }
         }
         "tr" | "hp:tr" => {
             let cells = std::mem::take(&mut ctx.table.current_row_cells);

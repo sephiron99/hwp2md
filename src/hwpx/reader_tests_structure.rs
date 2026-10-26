@@ -481,3 +481,50 @@ fn text_box_after_a_table_in_one_paragraph_keeps_document_order() {
     );
     assert_eq!(flow(xml), ["글", "<표>", "상자"]);
 }
+
+#[test]
+fn table_inside_a_cell_stays_in_that_cell() {
+    let cell = |inner: &str| format!(r#"<hp:tc><hp:subList>{inner}</hp:subList></hp:tc>"#);
+    let para = |inner: &str| format!(r#"<hp:p><hp:run>{inner}</hp:run></hp:p>"#);
+    let inner_table = format!(
+        r#"<hp:tbl colCnt="1"><hp:tr>{}</hp:tr></hp:tbl>"#,
+        cell(&para("<hp:t>안</hp:t>"))
+    );
+    let xml = format!(
+        r#"<root><hp:tbl colCnt="1"><hp:tr>{}</hp:tr><hp:tr>{}</hp:tr><hp:tr>{}</hp:tr></hp:tbl></root>"#,
+        cell(&para("<hp:t>위</hp:t>")),
+        cell(&format!(
+            "{}{}",
+            para(&format!("<hp:t>앞</hp:t>{inner_table}<hp:t>뒤</hp:t>")),
+            para("<hp:t>다음 문단</hp:t>")
+        )),
+        cell(&para("<hp:t>아래</hp:t>")),
+    );
+    let s = section(&xml);
+    assert_eq!(
+        s.blocks.len(),
+        1,
+        "only the outer table at top level: {:?}",
+        s.blocks
+    );
+    let ir::Block::Table { rows, .. } = &s.blocks[0] else {
+        panic!("expected Table, got {:?}", s.blocks[0]);
+    };
+    let text = |b: &ir::Block| match b {
+        ir::Block::Paragraph { inlines } => inlines.iter().map(|i| i.text.as_str()).collect(),
+        ir::Block::Table { rows, .. } => format!("<표 {}행>", rows.len()),
+        other => format!("{other:?}"),
+    };
+    let cells: Vec<Vec<String>> = rows
+        .iter()
+        .map(|r| r.cells[0].blocks.iter().map(text).collect())
+        .collect();
+    assert_eq!(
+        cells,
+        [
+            vec!["위"],
+            vec!["앞", "<표 1행>", "뒤", "다음 문단"],
+            vec!["아래"]
+        ]
+    );
+}

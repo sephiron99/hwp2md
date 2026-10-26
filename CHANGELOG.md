@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they stand (endnotes `[^e1]`, …) and their definition after the paragraph.
 - HWPX: text before a table in the same paragraph now comes before the table
   instead of being dropped, and text after it in the same run is kept.
+- HWPX: a table inside a table cell no longer wipes the outer table. The
+  parser kept one table state, so an inner table erased the outer table's
+  rows read so far and ended its open cell early (the rest of the cell went
+  outside the table). Outer tables are now set aside and resumed, and the
+  inner table stays in its cell. Markdown output writes such a table as
+  HTML with the inner table as a nested `<table>` in the cell (`grid` and
+  `repeat` formats put the inner table's text in the cell).
 
 ## [0.5.0] - 2026-05-19
 

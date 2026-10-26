@@ -290,3 +290,57 @@ fn table_format_grid_rowspan_continuation_border_is_blank_not_dashed() {
         );
     }
 }
+
+#[test]
+fn table_inside_a_cell_nests_as_html() {
+    let inner = ir::Block::Table {
+        rows: vec![ir::TableRow {
+            cells: vec![cell("안1", 1), cell("안2", 1)],
+            is_header: true,
+        }],
+        col_count: 2,
+        inner_margin: None,
+    };
+    let outer = ir::TableCell {
+        blocks: vec![
+            ir::Block::Paragraph {
+                inlines: vec![plain("앞 <글>")],
+            },
+            inner,
+        ],
+        colspan: 1,
+        rowspan: 1,
+    };
+    let mut doc = ir::Document::new();
+    doc.sections.push(ir::Section {
+        blocks: vec![ir::Block::Table {
+            rows: vec![ir::TableRow {
+                cells: vec![outer, cell("옆", 1)],
+                is_header: true,
+            }],
+            col_count: 2,
+            inner_margin: None,
+        }],
+        ..Default::default()
+    });
+
+    let html = write_markdown_with_table_format(&doc, false, TableFormat::Html);
+    assert!(
+        html.contains("<th>앞 &lt;글&gt; <table>"),
+        "nested in place: {html}"
+    );
+    assert!(html.contains("<th>안1</th>"), "inner cells: {html}");
+    assert!(
+        !html.contains("&lt;table"),
+        "inner table must not be escaped: {html}"
+    );
+    let first = html.find("<table>").expect("outer table");
+    assert!(
+        !html[first..html.rfind("</table>").expect("end")].contains("\n\n"),
+        "no blank line inside the HTML block: {html}"
+    );
+
+    // Formats without HTML keep the inner table's text in the cell.
+    let grid = write_markdown_with_table_format(&doc, false, TableFormat::Grid);
+    assert!(grid.contains("앞 <글> 안1 안2"), "grid: {grid}");
+}

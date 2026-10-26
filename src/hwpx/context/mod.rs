@@ -45,7 +45,10 @@ pub(crate) struct ParseContext {
     pub(crate) fmt: FormattingState,
 
     // ── Table ──────────────────────────────────────────────────────
+    /// The innermost open table.
     pub(crate) table: TableState,
+    /// Outer tables set aside while a table inside one of them is read.
+    pub(crate) table_stack: Vec<TableState>,
 
     // ── List ───────────────────────────────────────────────────────
     pub(crate) list: ListState,
@@ -135,6 +138,7 @@ impl Default for ParseContext {
             heading_level: None,
             fmt: FormattingState::default(),
             table: TableState::default(),
+            table_stack: Vec::new(),
             list: ListState::default(),
             equation_text: String::new(),
             in_equation: false,
@@ -194,14 +198,6 @@ impl ParseContext {
         // outer one.
         let inner = std::mem::replace(&mut self.after_paragraph, saved.footnotes);
         self.after_paragraph.extend(inner);
-    }
-
-    /// No footnote, list item, table cell, header or footer is open.
-    pub(crate) fn at_top_level(&self) -> bool {
-        !self.footnote.active
-            && !self.list.in_item
-            && !self.table.in_cell
-            && !self.header_footer.in_either_active()
     }
 
     /// Extract the accumulated `PageLayout` from the context.

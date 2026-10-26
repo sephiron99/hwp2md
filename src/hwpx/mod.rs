@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 mod reader;
+mod table_layout;
 mod writer;
 
 pub use reader::read_hwpx;

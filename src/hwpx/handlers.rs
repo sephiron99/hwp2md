@@ -1,6 +1,7 @@
 use crate::heading_style::parse_heading_style;
 use crate::ir::{self, InlineFormat};
 
+use super::super::table_layout;
 use super::context::{
     apply_charpr_attrs, flush_active_paragraph_scope, flush_cell_paragraph,
     flush_footnote_paragraph, flush_list_item_paragraph, flush_nested_scope,
@@ -75,6 +76,7 @@ pub(super) fn handle_start_element(
             }
             ctx.table.active = true;
             ctx.table.rows.clear();
+            ctx.table.row_sides.clear();
             ctx.table.col_count = 0;
             ctx.table.inner_margin = None;
             for attr in e.attributes().flatten() {
@@ -89,8 +91,18 @@ pub(super) fn handle_start_element(
         "inMargin" | "hp:inMargin" if ctx.table.active => ctx.table.parse_in_margin(e),
         "tr" | "hp:tr" => {
             ctx.table.current_row_cells.clear();
+            ctx.table.current_row_sides.clear();
         }
         "tc" | "hp:tc" => {
+            ctx.table.current_cell_sides = e
+                .attributes()
+                .flatten()
+                .find(|a| a.key.local_name().as_ref() == b"borderFillIDRef")
+                .and_then(|a| {
+                    ctx.border_fills
+                        .get(a.unescape_value().unwrap_or_default().as_ref())
+                })
+                .copied();
             ctx.table.in_cell = true;
             ctx.table.cell_blocks.clear();
             ctx.table.cell_inlines.clear();
@@ -282,20 +294,24 @@ pub(super) fn handle_end_element(
             );
             let inner_margin = ctx.table.inner_margin.take();
             let rows = std::mem::take(&mut ctx.table.rows);
+            let sides = std::mem::take(&mut ctx.table.row_sides);
             ctx.table.active = false;
-            let table = (!rows.is_empty()).then_some(ir::Block::Table {
-                rows,
-                col_count,
-                inner_margin,
-            });
+            // The tables a reader sees, and the text of borderless parts.
+            let blocks = if rows.is_empty() {
+                Vec::new()
+            } else {
+                table_layout::lay_out(rows, &sides, col_count, inner_margin)
+            };
             if let Some(outer) = ctx.table_stack.pop() {
                 // Back in the outer table; this one belongs to its open cell.
                 ctx.table = outer;
-                if let Some(block) = table.and_then(|t| ctx.push_block_scoped(t)) {
-                    staged.push(StagedBlock::Plain(block));
+                for block in blocks {
+                    if let Some(block) = ctx.push_block_scoped(block) {
+                        staged.push(StagedBlock::Plain(block));
+                    }
                 }
-            } else if let Some(table) = table {
-                staged.push(StagedBlock::Plain(table));
+            } else {
+                staged.extend(blocks.into_iter().map(StagedBlock::Plain));
             }
         }
         "tr" | "hp:tr" => {
@@ -304,6 +320,8 @@ pub(super) fn handle_end_element(
                 cells,
                 is_header: ctx.table.rows.is_empty(),
             });
+            let sides = std::mem::take(&mut ctx.table.current_row_sides);
+            ctx.table.row_sides.push(sides);
         }
         "tc" | "hp:tc" => {
             flush_cell_paragraph(ctx, CodeLangHint::Plain);
@@ -313,6 +331,8 @@ pub(super) fn handle_end_element(
                 colspan: ctx.table.current_colspan,
                 rowspan: ctx.table.current_rowspan,
             });
+            let sides = ctx.table.current_cell_sides.take();
+            ctx.table.current_row_sides.push(sides);
             ctx.table.in_cell = false;
         }
         "li" | "hp:li" => {

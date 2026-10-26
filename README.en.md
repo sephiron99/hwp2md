@@ -22,7 +22,10 @@
 - Inline code mapped to monospace font (Courier New) in HWPX output
 - Metadata preservation (title, author) round-trips through HWPX `hp:docInfo`
 - Ordered and unordered lists with nested items
-- Tables (GFM pipe syntax; colspan/rowspan fall back to HTML)
+- Tables (GFM pipe syntax; colspan/rowspan and tables inside cells fall back to HTML)
+  - From HWPX only the tables Hancom draws on screen stay tables: a table (or rows of one) with
+    hidden cell borders becomes its cells' text in reading order, and one-column tables and 1×1
+    boxes give just their content. Line breaks inside a cell become `<br>`
 - Fenced code blocks with language annotation
 - Block quotes
 - Images with alt text; optional extraction to an assets directory

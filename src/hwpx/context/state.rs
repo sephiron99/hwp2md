@@ -1,3 +1,4 @@
+use crate::hwpx::table_layout::Sides;
 use crate::ir;
 
 // ── Sub-struct definitions ──────────────────────────────────────────────
@@ -61,6 +62,10 @@ pub(crate) struct TableState {
     pub(crate) current_colspan: u32,
     pub(crate) current_rowspan: u32,
     pub(crate) inner_margin: Option<ir::TableInnerMargin>,
+    /// Drawn sides of each cell, parallel to `rows` (`None`: unknown).
+    pub(crate) row_sides: Vec<Vec<Option<Sides>>>,
+    pub(crate) current_row_sides: Vec<Option<Sides>>,
+    pub(crate) current_cell_sides: Option<Sides>,
 }
 
 impl Default for TableState {
@@ -77,6 +82,9 @@ impl Default for TableState {
             current_colspan: 1,
             current_rowspan: 1,
             inner_margin: None,
+            row_sides: Vec::new(),
+            current_row_sides: Vec::new(),
+            current_cell_sides: None,
         }
     }
 }

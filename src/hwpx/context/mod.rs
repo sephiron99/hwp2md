@@ -39,6 +39,8 @@ pub(crate) struct ParseContext {
     /// Ordered list of face names parsed from `<hh:fontface>` entries in
     /// header.xml.
     pub(crate) face_names: Vec<String>,
+    /// Drawn sides of each `<hh:borderFill>` in header.xml, by id.
+    pub(crate) border_fills: std::collections::HashMap<String, crate::hwpx::table_layout::Sides>,
     pub(crate) heading_level: Option<u8>,
 
     // ── Character formatting ───────────────────────────────────────
@@ -135,6 +137,7 @@ impl Default for ParseContext {
             current_text: String::new(),
             current_inlines: Vec::new(),
             face_names: Vec::new(),
+            border_fills: std::collections::HashMap::new(),
             heading_level: None,
             fmt: FormattingState::default(),
             table: TableState::default(),

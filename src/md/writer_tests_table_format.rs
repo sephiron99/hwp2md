@@ -344,3 +344,31 @@ fn table_inside_a_cell_nests_as_html() {
     let grid = write_markdown_with_table_format(&doc, false, TableFormat::Grid);
     assert!(grid.contains("앞 <글> 안1 안2"), "grid: {grid}");
 }
+
+#[test]
+fn line_break_in_a_cell_does_not_break_the_row() {
+    let mut doc = ir::Document::new();
+    doc.sections.push(ir::Section {
+        blocks: vec![ir::Block::Table {
+            rows: vec![ir::TableRow {
+                cells: vec![cell("첫 줄\n둘째 줄", 1), cell("옆", 1)],
+                is_header: true,
+            }],
+            col_count: 2,
+            inner_margin: None,
+        }],
+        ..Default::default()
+    });
+    let pipe = write_markdown_with_table_format(&doc, false, TableFormat::Html);
+    assert!(pipe.contains("| 첫 줄<br>둘째 줄 | 옆 |"), "pipe: {pipe}");
+
+    // Merged cells → HTML: the break must not leave a raw blank line either.
+    if let ir::Block::Table { rows, .. } = &mut doc.sections[0].blocks[0] {
+        rows[0].cells[0] = cell("첫 줄\n\n셋째 줄", 2);
+    }
+    let html = write_markdown_with_table_format(&doc, false, TableFormat::Html);
+    assert!(
+        html.contains("<th colspan=\"2\">첫 줄<br><br>셋째 줄</th>"),
+        "html: {html}"
+    );
+}

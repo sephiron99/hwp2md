@@ -41,6 +41,7 @@ pub fn read_hwpx(path: &Path) -> Result<ir::Document, Hwp2MdError> {
         doc.metadata = metadata;
     }
     let face_names = parse_face_names(&header_xml);
+    let border_fills = super::table_layout::parse_border_fills(&header_xml);
     let break_setting = parse_break_setting(&header_xml);
 
     // Build the BinData ID -> full ZIP path map before parsing sections so that
@@ -51,7 +52,7 @@ pub fn read_hwpx(path: &Path) -> Result<ir::Document, Hwp2MdError> {
     let section_files = find_section_files(&mut archive);
 
     for section_path in &section_files {
-        match read_section_xml(&mut archive, section_path, &face_names) {
+        match read_section_xml(&mut archive, section_path, &face_names, &border_fills) {
             Ok(mut section) => {
                 resolve_bin_refs(&mut section, &bin_map);
                 section.break_setting = break_setting.clone();
@@ -410,9 +411,10 @@ fn read_section_xml(
     archive: &mut zip::ZipArchive<std::fs::File>,
     path: &str,
     face_names: &[String],
+    border_fills: &HashMap<String, super::table_layout::Sides>,
 ) -> Result<ir::Section, Hwp2MdError> {
     let xml = read_zip_entry(archive, path)?;
-    parse_section_xml_with_face_names(&xml, face_names)
+    parse_section_xml_with_header(&xml, face_names, border_fills)
 }
 
 /// Parse a section XML string into an `ir::Section` using a pre-built font
@@ -422,11 +424,26 @@ fn read_section_xml(
 /// indices on `<charPr>` elements to be resolved to human-readable font names
 /// stored on `ir::Inline::font_name`.  Pass an empty slice when no header is
 /// available (e.g. in unit tests that work with raw section XML snippets).
-// Result return keeps consistent Result interface for the handler dispatch table.
-#[allow(clippy::unnecessary_wraps)]
+#[cfg(test)]
 pub(crate) fn parse_section_xml_with_face_names(
     xml: &str,
     face_names: &[String],
+) -> Result<ir::Section, Hwp2MdError> {
+    parse_section_xml_with_header(xml, face_names, &HashMap::new())
+}
+
+/// Parse a section XML string into an `ir::Section` with the font face
+/// names and border fills of header.xml.
+///
+/// `face_names` resolves `faceNameIDRef` indices on `<charPr>` elements to
+/// font names stored on `ir::Inline::font_name`; `border_fills` decides what
+/// parts of each table are drawn (see [`super::table_layout`]).
+// Result return keeps consistent Result interface for the handler dispatch table.
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn parse_section_xml_with_header(
+    xml: &str,
+    face_names: &[String],
+    border_fills: &HashMap<String, super::table_layout::Sides>,
 ) -> Result<ir::Section, Hwp2MdError> {
     // `staged` collects both plain blocks and list-paragraph sentinels in
     // document order.  After the XML event loop, `group_list_paragraphs`
@@ -450,6 +467,7 @@ pub(crate) fn parse_section_xml_with_face_names(
 
     let mut context = ParseContext {
         face_names: face_names.to_vec(),
+        border_fills: border_fills.clone(),
         ..ParseContext::default()
     };
 

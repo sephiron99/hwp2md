@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into every logical grid position it spans. 9 new tests (5 unit +
   4 CLI subprocess integration tests against a real fixture).
 
+### Changed
+- HWPX → Markdown: only the tables Hancom draws on screen stay tables. Cell
+  borders are read from `header.xml` (`<hh:borderFill>`); a table, or a run
+  of its rows, with no visible cell lines becomes its cells' blocks in
+  reading order. Kept tables drop empty cells outside their lines, empty
+  spacer rows without a line above or below, and empty trailing columns,
+  and merge grid lines no cell uses. A table left with one column (a box
+  around content) gives its cells' blocks instead. Tables without border
+  information (e.g. written by hwp2md itself) are unchanged.
+- Markdown tables: a line break inside a cell is written as `<br>` instead
+  of a raw newline, which broke the row (pipe/grid) or could end the HTML
+  block (blank line).
+
 ### Fixed
 - HWPX: a paragraph holding a footnote lost all of its text before the note.
   Hancom's `<hp:footNote>`/`<hp:endNote>` (inside `<hp:ctrl>`) were not read

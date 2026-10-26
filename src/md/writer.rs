@@ -666,7 +666,7 @@ fn cell_to_html(cell: &ir::TableCell, table_format: TableFormat) -> String {
         let text = blocks_to_text(run, table_format).replace('|', "\\|");
         run.clear();
         if !text.is_empty() {
-            parts.push(escape_html(&text));
+            parts.push(escape_html(&text).replace('\n', "<br>"));
         }
     };
     for block in &cell.blocks {
@@ -684,8 +684,13 @@ fn cell_to_html(cell: &ir::TableCell, table_format: TableFormat) -> String {
     parts.join(" ")
 }
 
+/// A cell's text on one line: a line break inside the cell becomes `<br>`,
+/// since a raw newline would end the table row (or, in HTML, a blank line
+/// would end the HTML block).
 fn cell_to_text(cell: &ir::TableCell, table_format: TableFormat) -> String {
-    blocks_to_text(&cell.blocks, table_format).replace('|', "\\|")
+    blocks_to_text(&cell.blocks, table_format)
+        .replace('|', "\\|")
+        .replace('\n', "<br>")
 }
 
 /// The text of a cell's blocks on one line.  A table inside (only met

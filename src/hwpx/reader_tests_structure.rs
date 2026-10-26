@@ -393,8 +393,11 @@ fn ctrl_newpage_mid_paragraph_splits_into_three_ordered_blocks() {
 
 /// Paragraph text and tables of `section(xml)` in order, tables as `<표>`.
 fn flow(xml: &str) -> Vec<String> {
-    section(xml)
-        .blocks
+    flow_of(&section(xml))
+}
+
+fn flow_of(s: &ir::Section) -> Vec<String> {
+    s.blocks
         .iter()
         .map(|b| match b {
             ir::Block::Paragraph { inlines } => inlines.iter().map(|i| i.text.as_str()).collect(),
@@ -527,4 +530,36 @@ fn table_inside_a_cell_stays_in_that_cell() {
             vec!["아래"]
         ]
     );
+}
+
+#[test]
+fn borderless_frame_reads_as_text_and_drawn_table_inside_it_stays() {
+    let fills = crate::hwpx::table_layout::parse_border_fills(concat!(
+        r##"<hh:head><hh:borderFills>"##,
+        r##"<hh:borderFill id="1"><hh:leftBorder type="NONE" color="#000000"/></hh:borderFill>"##,
+        r##"<hh:borderFill id="2"><hh:leftBorder type="SOLID" color="#000000"/>"##,
+        r##"<hh:rightBorder type="SOLID" color="#000000"/><hh:topBorder type="SOLID" color="#000000"/>"##,
+        r##"<hh:bottomBorder type="SOLID" color="#000000"/></hh:borderFill>"##,
+        r##"</hh:borderFills></hh:head>"##,
+    ));
+    let cell = |fill: &str, inner: &str| {
+        format!(r#"<hp:tc borderFillIDRef="{fill}"><hp:subList>{inner}</hp:subList></hp:tc>"#)
+    };
+    let para = |t: &str| format!(r#"<hp:p><hp:run><hp:t>{t}</hp:t></hp:run></hp:p>"#);
+    let drawn = format!(
+        r#"<hp:p><hp:run><hp:tbl colCnt="2"><hp:tr>{}{}</hp:tr></hp:tbl></hp:run></hp:p>"#,
+        cell("2", &para("가")),
+        cell("2", &para("나"))
+    );
+    let xml = format!(
+        r#"<root><hp:p><hp:run><hp:tbl colCnt="2"><hp:tr>{}{}</hp:tr></hp:tbl></hp:run></hp:p></root>"#,
+        cell("1", &para("틀 왼쪽")),
+        cell("1", &format!("{}{drawn}", para("틀 오른쪽")))
+    );
+    let s = parse_section_xml_with_header(&xml, &[], &fills).expect("parse");
+    assert_eq!(flow_of(&s), ["틀 왼쪽", "틀 오른쪽", "<표>"]);
+    let ir::Block::Table { rows, .. } = &s.blocks[2] else {
+        unreachable!()
+    };
+    assert_eq!(rows[0].cells.len(), 2, "the drawn 1×2 table is kept whole");
 }

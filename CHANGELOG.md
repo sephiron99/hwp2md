@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   block (blank line).
 
 ### Fixed
+- Markdown → HWPX: an HTML table with a `<table>` inside a cell was dropped
+  entirely (with a warning). The inner table is now read into that cell,
+  between the cell's text, as the HWPX → Markdown direction writes it.
+- Markdown → HWPX: `<br>` in a table cell (pipe or HTML) is a line break.
+  It was written into the HWPX as the literal text `<br>` (pipe tables) or
+  dropped (HTML tables). `<br>` in other inline text is a line break too.
+- HWPX writer: a line break in text is written as `<hp:lineBreak/>` instead
+  of a raw newline inside `<hp:t>`.
 - HWPX: a paragraph holding a footnote lost all of its text before the note.
   Hancom's `<hp:footNote>`/`<hp:endNote>` (inside `<hp:ctrl>`) were not read
   as notes, and any paragraph nested in a paragraph (a note, table cell or

@@ -135,3 +135,29 @@ mod tests_header_footer;
 
 #[path = "writer_tests_table.rs"]
 mod tests_table;
+
+#[test]
+fn line_break_in_text_is_written_as_line_break_element() {
+    let xml = section_xml(vec![Block::Paragraph {
+        inlines: vec![Inline::plain("첫 줄\n둘째 줄")],
+    }]);
+    assert!(
+        xml.contains("<hp:t>첫 줄<hp:lineBreak/>둘째 줄</hp:t>"),
+        "line break must be <hp:lineBreak/>: {xml}"
+    );
+}
+
+#[test]
+fn line_break_alone_in_a_run_gets_no_indentation_inside_t() {
+    let xml = section_xml(vec![Block::Paragraph {
+        inlines: vec![
+            Inline::plain("첫 줄"),
+            Inline::plain("\n"),
+            Inline::plain("둘째 줄"),
+        ],
+    }]);
+    assert!(
+        xml.contains("<hp:t><hp:lineBreak/></hp:t>"),
+        "no whitespace may surround the break inside <hp:t>: {xml}"
+    );
+}

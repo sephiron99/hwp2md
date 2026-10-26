@@ -472,3 +472,55 @@ fn parse_html_table_self_closing_td_not_dropped() {
         panic!("expected Block::Table");
     }
 }
+
+// ── Nested tables and <br> (as hwp2md's own Markdown writer emits them) ──
+
+#[test]
+fn parse_html_table_nested_table_stays_in_its_cell() {
+    let html = concat!(
+        "<table>\n  <tr>\n    <td><table>\n  <tr>\n    <th>안1</th>\n    <th>안2</th>\n  </tr>\n",
+        "</table> 뒤 글</td>\n    <td>옆</td>\n  </tr>\n</table>\n"
+    );
+    let Some(ir::Block::Table {
+        rows, col_count, ..
+    }) = parse_html_table(html)
+    else {
+        panic!("nested table must parse");
+    };
+    assert_eq!((rows.len(), col_count), (1, 2));
+    match &rows[0].cells[0].blocks[..] {
+        [ir::Block::Table {
+            rows: inner,
+            col_count: 2,
+            ..
+        }, ir::Block::Paragraph { inlines }] => {
+            assert_eq!(cell_text(&inner[0].cells[1]), "안2");
+            assert!(inner[0].is_header);
+            assert_eq!(inlines[0].text, "뒤 글");
+        }
+        other => panic!("expected [Table, Paragraph], got {other:?}"),
+    }
+    assert_eq!(cell_text(&rows[0].cells[1]), "옆");
+}
+
+#[test]
+fn parse_html_table_br_is_a_line_break() {
+    let html = "<table><tr><td>가<br>나<br/>다</td></tr></table>";
+    let Some(ir::Block::Table { rows, .. }) = parse_html_table(html) else {
+        panic!("table must parse");
+    };
+    assert_eq!(cell_text(&rows[0].cells[0]), "가\n나\n다");
+}
+
+#[test]
+fn pipe_table_br_is_a_line_break() {
+    let doc = parse_markdown("| 가 | 나 |\n| --- | --- |\n| 첫 줄<br>둘째 줄 | 옆 |\n");
+    let Some(ir::Block::Table { rows, .. }) = first_section_blocks(&doc).first() else {
+        panic!("expected a table");
+    };
+    let ir::Block::Paragraph { inlines } = &rows[1].cells[0].blocks[0] else {
+        panic!("expected a paragraph");
+    };
+    let text: String = inlines.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(text, "첫 줄\n둘째 줄");
+}

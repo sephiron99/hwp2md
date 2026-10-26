@@ -392,3 +392,54 @@ End of document.
         "schema violations on mixed doc: {schema_violations:#?}"
     );
 }
+
+/// What hwp2md's Markdown writer emits for HWPX tables — `<br>` in cells
+/// and a table nested in an HTML table cell — survives Markdown → HWPX →
+/// IR and the HWPX stays valid.
+#[test]
+fn markdown_cell_breaks_and_nested_tables_roundtrip_through_hwpx() {
+    let markdown = concat!(
+        "| 구분 | 내용 |\n| --- | --- |\n| 첫 줄<br>둘째 줄 | 옆 |\n\n",
+        "<table>\n  <tr>\n    <th colspan=\"2\">병합</th>\n  </tr>\n  <tr>\n",
+        "    <td>가<br>나</td>\n    <td><table>\n  <tr>\n    <th>안쪽</th>\n  </tr>\n</table> 뒤</td>\n",
+        "  </tr>\n</table>\n",
+    );
+    let ir_doc = md::parse_markdown(markdown);
+    let tmp = tempfile::Builder::new().suffix(".hwpx").tempfile().unwrap();
+    hwpx::write_hwpx(&ir_doc, tmp.path(), None).unwrap();
+
+    let bytes = std::fs::read(tmp.path()).unwrap();
+    let violations = validate_hwpx_bytes_with_schema(&bytes);
+    let serious: Vec<_> = violations
+        .iter()
+        .filter(|v| v.error_code.0 >= 11000 && v.error_code.0 < 14000)
+        .collect();
+    assert!(serious.is_empty(), "violations: {serious:#?}");
+
+    let back = hwpx::read_hwpx(tmp.path()).unwrap();
+    let blocks = &back.sections[0].blocks;
+    let tables: Vec<&Vec<ir::TableRow>> = blocks
+        .iter()
+        .filter_map(|b| match b {
+            ir::Block::Table { rows, .. } => Some(rows),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tables.len(), 2, "both tables come back: {blocks:#?}");
+    let text = |c: &ir::TableCell| -> String {
+        c.blocks
+            .iter()
+            .map(|b| match b {
+                ir::Block::Paragraph { inlines } => {
+                    inlines.iter().map(|i| i.text.as_str()).collect()
+                }
+                ir::Block::Table { .. } => "<표>".to_string(),
+                other => format!("{other:?}"),
+            })
+            .collect::<Vec<String>>()
+            .join("|")
+    };
+    assert_eq!(text(&tables[0][1].cells[0]), "첫 줄\n둘째 줄");
+    assert_eq!(text(&tables[1][1].cells[0]), "가\n나");
+    assert_eq!(text(&tables[1][1].cells[1]), "<표>|뒤");
+}

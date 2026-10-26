@@ -747,7 +747,7 @@ fn write_inline_run<W: Write>(
 
         writer.write_event(Event::Start(BytesStart::new("hp:baseText")))?;
         writer.write_event(Event::Start(BytesStart::new("hp:t")))?;
-        writer.write_event(Event::Text(BytesText::new(&inline.text)))?;
+        write_text_with_breaks(writer, &inline.text)?;
         writer.write_event(Event::End(BytesEnd::new("hp:t")))?;
         writer.write_event(Event::End(BytesEnd::new("hp:baseText")))?;
 
@@ -768,11 +768,30 @@ fn write_inline_run<W: Write>(
         }
     } else {
         writer.write_event(Event::Start(BytesStart::new("hp:t")))?;
-        writer.write_event(Event::Text(BytesText::new(&inline.text)))?;
+        write_text_with_breaks(writer, &inline.text)?;
         writer.write_event(Event::End(BytesEnd::new("hp:t")))?;
     }
 
     writer.write_event(Event::End(BytesEnd::new("hp:run")))?;
+    Ok(())
+}
+
+/// Write the text of an `<hp:t>`; a line break (`\n`) becomes
+/// `<hp:lineBreak/>`, the element Hancom uses for it.
+///
+/// Every part is written as a text event, even an empty one: the indenting
+/// writer would otherwise put a newline and spaces around the element, and
+/// inside `<hp:t>` those are text.
+fn write_text_with_breaks<W: Write>(
+    writer: &mut Writer<W>,
+    text: &str,
+) -> Result<(), quick_xml::Error> {
+    for (i, part) in text.split('\n').enumerate() {
+        if i > 0 {
+            writer.write_event(Event::Empty(BytesStart::new("hp:lineBreak")))?;
+        }
+        writer.write_event(Event::Text(BytesText::new(part)))?;
+    }
     Ok(())
 }
 

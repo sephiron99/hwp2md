@@ -288,6 +288,15 @@ fn node_to_block<'a>(node: &'a AstNode<'a>) -> Option<ir::Block> {
     }
 }
 
+/// `<br>`, `<br/>` or `<br />`, in any case.
+fn is_br_tag(tag: &str) -> bool {
+    let inner = tag
+        .strip_prefix('<')
+        .and_then(|t| t.strip_suffix('>'))
+        .map(|t| t.trim_end_matches('/').trim());
+    inner.is_some_and(|t| t.eq_ignore_ascii_case("br"))
+}
+
 /// Return `true` when an HTML block contains exactly a `<!-- pagebreak -->`
 /// (or `<!--pagebreak-->`) marker, ignoring surrounding whitespace and
 /// comparing the keyword case-insensitively.  This is the round-trip marker
@@ -471,6 +480,11 @@ fn collect_inlines_recursive<'a>(
                     current_style.subscript = true;
                 } else if tag.eq_ignore_ascii_case("</sub>") {
                     current_style.subscript = style.subscript;
+                } else if is_br_tag(tag) {
+                    // A line break, as hwp2md writes inside table cells.
+                    if !in_rt {
+                        inlines.push(ir::Inline::plain("\n"));
+                    }
                 } else {
                     inlines.push(ir::Inline::plain(html.clone()));
                 }

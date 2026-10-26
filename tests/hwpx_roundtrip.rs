@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// HWPX structural roundtrip tests.
 ///
 /// Each test follows pipeline (A): MD → IR → HWPX bytes → read HWPX → IR → verify structure.

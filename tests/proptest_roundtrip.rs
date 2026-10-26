@@ -8,6 +8,7 @@
 //! 3. **No panics** — the pipeline never panics on any generated document.
 //!
 //! A separate proptest block covers HWPX write→read span preservation.
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 
 use hwp2md::ir::{Block, Document, Inline, ListItem, Metadata, Section, TableCell, TableRow};
 use hwp2md::md::{parse_markdown, write_markdown};

@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// Integration tests using real HWPX fixtures built in memory.
 ///
 /// Each test constructs a minimal, valid HWPX ZIP using the `HwpxFixture`

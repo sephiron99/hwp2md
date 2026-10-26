@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// Tests for OWPML flat-paragraph list detection and nested list grouping.
 ///
 /// OWPML encodes lists as **flat** `<hp:p>` paragraphs with `paraPrIDRef` and

@@ -34,7 +34,7 @@ enum Commands {
         #[arg(long, value_enum, default_value = "html")]
         table_format: hwp2md::convert::TableFormat,
     },
-    /// Convert Markdown to HWPX
+    /// Convert Markdown to HWPX (deprecated: no longer developed)
     ToHwpx {
         /// Input Markdown file
         input: PathBuf,
@@ -127,6 +127,7 @@ fn main() -> Result<()> {
             output,
             style,
         } => {
+            #[allow(deprecated)]
             hwp2md::convert::to_hwpx(&input, output.as_deref(), style.as_deref())?;
         }
         Commands::Info { input } => {

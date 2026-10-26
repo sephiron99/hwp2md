@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 use super::parse_break_setting;
 use crate::ir::{Block, BreakSetting, Document, Inline, Metadata, Section};
 

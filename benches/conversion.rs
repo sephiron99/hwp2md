@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use tempfile::NamedTempFile;
 

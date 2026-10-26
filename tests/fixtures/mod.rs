@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// In-memory HWPX fixture builder.
 ///
 /// HWPX is a ZIP container whose required entries are:

@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 use super::*;
 
 // ── Phase C-1 tests: multiple paraPr entries for paragraph styling ─────────

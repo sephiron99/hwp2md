@@ -14,6 +14,7 @@
 //!   → read_hwpx  →  write_markdown          = md2
 //!   → assert md1 == md2
 //! ```
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 
 use hwp2md::hwpx::{read_hwpx, write_hwpx};
 use hwp2md::md::{parse_markdown, write_markdown};

@@ -39,7 +39,8 @@
 //!     false,  // frontmatter
 //! ).expect("conversion failed");
 //!
-//! // Markdown → HWPX
+//! // Markdown → HWPX (deprecated: no longer developed)
+//! # #[allow(deprecated)]
 //! hwp2md::convert::to_hwpx(
 //!     Path::new("document.md"),
 //!     Some(Path::new("document.hwpx")),

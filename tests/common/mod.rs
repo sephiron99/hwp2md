@@ -1,7 +1,8 @@
-// Shared test helpers for hwp2md integration tests.
-// ---------------------------------------------------------------------------
-// CLI helpers — used by cli.rs and cli_batch.rs
-// ---------------------------------------------------------------------------
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
+                      // Shared test helpers for hwp2md integration tests.
+                      // ---------------------------------------------------------------------------
+                      // CLI helpers — used by cli.rs and cli_batch.rs
+                      // ---------------------------------------------------------------------------
 
 /// Returns a [`std::process::Command`] pointing at the compiled `hwp2md` binary.
 #[allow(dead_code)]

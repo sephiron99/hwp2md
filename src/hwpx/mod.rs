@@ -6,4 +6,5 @@ mod table_layout;
 mod writer;
 
 pub use reader::read_hwpx;
+#[allow(deprecated)] // re-export; the item carries the deprecation
 pub use writer::write_hwpx;

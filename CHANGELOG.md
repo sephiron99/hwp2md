@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+- **Markdown → HWPX** (`to-hwpx`, `convert` from `.md` to `.hwpx`,
+  `convert::to_hwpx`, `hwpx::write_hwpx`) is deprecated and no longer
+  developed. The functions carry `#[deprecated]`, the CLI help says so, and
+  a conversion logs a warning. Hancom Office opens the output, but it does
+  not fully follow OWPML; the known differences are listed in
+  `tests/hwpx_validation.rs`.
+
 ### Removed
 - **HWP 5.0 binary (`.hwp`) support** — the `hwp` module (CFB/OLE2 reader,
   record parser, distribution-document decryption, EQEDIT → LaTeX) is gone,

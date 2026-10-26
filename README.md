@@ -11,7 +11,7 @@
 ## 주요 기능
 
 - **HWPX** (ZIP + XML) → Markdown
-- **Markdown → HWPX**
+- **Markdown → HWPX** — **deprecated**: 더 이상 개발하지 않습니다. 한컴오피스에서 열리는 것은 확인했지만 OWPML을 완전히 따르지는 않습니다.
 - HWP 5.0 바이너리(`.hwp`)는 지원하지 않습니다. 한컴오피스에서 `.hwpx`로 저장한 뒤 변환하세요.
 - 제목(H1-H6), 문단, 굵게, 기울임, 밑줄, 취소선, 인라인 코드
 - 위첨자 / 아래첨자
@@ -73,7 +73,10 @@ hwp2md to-md report.hwpx -o report.md --assets-dir ./images
 hwp2md to-md report.hwpx -o report.md --frontmatter
 ```
 
-### Markdown → HWPX 변환
+### Markdown → HWPX 변환 (deprecated)
+
+> 더 이상 개발하지 않는 기능입니다. 실행하면 경고가 나옵니다. 한컴오피스에서 열리지만, 글자 모양(굵게·기울임 등)이 run 안의
+> `charPr`로 들어가는 등 OWPML과 다른 부분이 남아 있습니다.
 
 ```bash
 # 출력 파일명 자동 결정 (.hwpx 확장자)
@@ -160,7 +163,8 @@ fn main() -> anyhow::Result<()> {
         true, // YAML 프론트매터 출력
     )?;
 
-    // Markdown → HWPX
+    // Markdown → HWPX (deprecated)
+    #[allow(deprecated)]
     convert::to_hwpx(
         "draft.md".as_ref(),
         Some("draft.hwpx".as_ref()),
@@ -211,7 +215,7 @@ println!("{}개 섹션", doc.sections.len());
 
 ## 형식 지원 매트릭스
 
-| 기능 | HWPX → MD | MD → HWPX |
+| 기능 | HWPX → MD | MD → HWPX (deprecated) |
 |------|:---:|:---:|
 | 제목 (H1-H6) | O | O |
 | 문단 | O | O |
@@ -272,6 +276,8 @@ tests/             통합 테스트
 ## 알려진 제한 사항
 
 - HWP 5.0 바이너리(`.hwp`) 형식은 입력·출력 모두 지원하지 않습니다.
+- Markdown → HWPX는 deprecated이며 더 이상 개발하지 않습니다. 쪽 설정 위치, 표 구조, 글자 모양 등 OWPML과 다른 부분은
+  `tests/hwpx_validation.rs`의 알려진 차이 목록에 있습니다.
 - 다단 레이아웃은 단일 컬럼으로 평탄화됩니다.
 - colspan/rowspan이 복잡한 표는 Markdown에서 HTML로 폴백합니다.
 

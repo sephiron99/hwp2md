@@ -134,10 +134,18 @@ pub fn to_markdown_with_table_format(
 /// style template that overrides page dimensions, margins, fonts, and heading
 /// line spacing in the generated HWPX output.
 ///
+/// **Deprecated:** Markdown → HWPX is no longer developed.  Hancom Office
+/// opens the output, but it does not fully follow OWPML (see the HWPX
+/// validation tests for the known differences).
+///
 /// # Errors
 ///
 /// Returns [`Hwp2MdError::UnsupportedFormat`] when `input` does not have a
 /// Markdown extension, and propagates I/O or write errors.
+#[deprecated(
+    note = "Markdown → HWPX is no longer developed: the output opens in Hancom Office but does not fully follow OWPML"
+)]
+#[allow(deprecated)] // calls `hwpx::write_hwpx`
 pub fn to_hwpx(
     input: &Path,
     output: Option<&Path>,
@@ -155,6 +163,10 @@ pub fn to_hwpx(
         )));
     }
 
+    tracing::warn!(
+        "Markdown → HWPX is deprecated and no longer developed; \
+         the output opens in Hancom Office but does not fully follow OWPML"
+    );
     let content = fs::read_to_string(input)?;
     let doc = md::parse_markdown(&content);
 
@@ -209,7 +221,7 @@ pub fn show_info(input: &Path) -> Result<(), Hwp2MdError> {
 /// | Input ext            | Output ext           | Action       |
 /// | -------------------- | -------------------- | ------------ |
 /// | `.hwpx`              | `.md`, `.markdown`   | [`to_markdown`] |
-/// | `.md`, `.markdown`   | `.hwpx`              | [`to_hwpx`]  |
+/// | `.md`, `.markdown`   | `.hwpx`              | [`to_hwpx`] (deprecated) |
 ///
 /// The legacy binary HWP 5.0 format (`.hwp`) is not supported in either
 /// direction; save such documents as `.hwpx` in Hancom Office first.
@@ -231,6 +243,7 @@ pub fn show_info(input: &Path) -> Result<(), Hwp2MdError> {
 /// `output` already exists.  Returns [`Hwp2MdError::UnsupportedFormat`]
 /// for unrecognised extension pairs.  I/O and parse errors from the
 /// underlying readers are propagated as-is.
+#[allow(deprecated)] // the Markdown → HWPX direction calls `to_hwpx`
 pub fn convert_auto(input: &Path, output: &Path, force: bool) -> Result<(), Hwp2MdError> {
     if !force && output.exists() {
         return Err(Hwp2MdError::OutputExists {
@@ -626,6 +639,7 @@ impl<'a> ConvertOptions<'a> {
     /// - [`Hwp2MdError::HwpxParse`] — parse error
     ///   in the input document.
     /// - [`Hwp2MdError::HwpxWrite`] — error while generating the HWPX output.
+    #[allow(deprecated)] // the Markdown → HWPX direction calls `to_hwpx`
     pub fn execute(self) -> Result<(), Hwp2MdError> {
         if !self.force && self.output.exists() {
             return Err(Hwp2MdError::OutputExists {

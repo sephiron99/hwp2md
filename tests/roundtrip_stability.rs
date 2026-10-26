@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// Integration tests: MD → IR → MD stability and header/footer roundtrips.
 use hwp2md::ir;
 use hwp2md::md::{parse_markdown, write_markdown};

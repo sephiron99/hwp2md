@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// HWPX full-roundtrip tests — Phase D-1 (part 1).
 ///
 /// Each test drives the complete pipeline:

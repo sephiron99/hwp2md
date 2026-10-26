@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 use super::*;
 use crate::ir::{Block, Inline, PageLayout, Section};
 use crate::style::StyleTemplate;

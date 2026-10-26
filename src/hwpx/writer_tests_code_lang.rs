@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// Phase C-3: Code block language preservation tests.
 ///
 /// Verifies that the language hint stored on `Block::CodeBlock.language` is:

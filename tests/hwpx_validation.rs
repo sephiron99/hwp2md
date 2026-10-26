@@ -1,3 +1,4 @@
+#![allow(deprecated)] // Markdown → HWPX (write_hwpx / to_hwpx) is deprecated but still tested
 /// HWPX validation tests using `polaris_dvc` as a dev-dependency.
 ///
 /// These tests verify that hwp2md's HWPX writer produces output that passes

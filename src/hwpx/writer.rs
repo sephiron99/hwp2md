@@ -332,10 +332,16 @@ fn collect_from_inlines(
 
 /// Write an IR document to an HWPX (OWPML ZIP) file.
 ///
+/// **Deprecated:** Markdown → HWPX is no longer developed.  Hancom Office
+/// opens the output, but it does not fully follow OWPML.
+///
 /// # Errors
 ///
 /// Returns an error if the output file cannot be created, ZIP writing
 /// fails, or the optional style template is invalid.
+#[deprecated(
+    note = "Markdown → HWPX is no longer developed: the output opens in Hancom Office but does not fully follow OWPML"
+)]
 pub fn write_hwpx(
     doc: &ir::Document,
     output: &Path,

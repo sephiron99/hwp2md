@@ -12,7 +12,7 @@
 ## Features
 
 - HWPX (ZIP + XML) to Markdown
-- Markdown to HWPX
+- Markdown to HWPX — **deprecated**: no longer developed. Hancom Office opens the output, but it does not fully follow OWPML.
 - The legacy HWP 5.0 binary format (`.hwp`) is not supported; save such documents as `.hwpx` in Hancom Office first.
 - Headings levels 1-6, paragraphs, bold, italic, underline, strikethrough, inline code
 - Superscript and subscript inline styles
@@ -75,7 +75,10 @@ hwp2md to-md report.hwpx -o report.md --assets-dir ./images
 hwp2md to-md report.hwpx -o report.md --frontmatter
 ```
 
-### Convert Markdown to HWPX
+### Convert Markdown to HWPX (deprecated)
+
+> No longer developed; running it prints a warning. Hancom Office opens the output, but parts of it differ from OWPML
+> (bold, italic … go into a run-level `charPr`, among others).
 
 ```bash
 # Output file defaults to input name with .hwpx extension
@@ -162,7 +165,8 @@ fn main() -> anyhow::Result<()> {
         true, // emit YAML front matter
     )?;
 
-    // Markdown to HWPX
+    // Markdown to HWPX (deprecated)
+    #[allow(deprecated)]
     convert::to_hwpx(
         "draft.md".as_ref(),
         Some("draft.hwpx".as_ref()),
@@ -213,7 +217,7 @@ println!("{} sections", doc.sections.len());
 
 ## Format Support Matrix
 
-| Feature | HWPX -> MD | MD -> HWPX |
+| Feature | HWPX -> MD | MD -> HWPX (deprecated) |
 |---------|:---:|:---:|
 | Headings (H1-H6) | yes | yes |
 | Paragraphs | yes | yes |
@@ -274,6 +278,8 @@ tests/             Integration tests
 ## Known Limitations
 
 - The HWP 5.0 binary format (`.hwp`) is not supported for input or output.
+- Markdown to HWPX is deprecated and no longer developed. Its known OWPML differences (section properties, table
+  structure, character formatting …) are listed in `tests/hwpx_validation.rs`.
 - Multi-column layouts are flattened to a single column.
 - Tables with non-trivial `colspan`/`rowspan` fall back to raw HTML in the Markdown output.
 

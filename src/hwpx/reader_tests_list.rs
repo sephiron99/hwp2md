@@ -520,3 +520,19 @@ fn roundtrip_nested_list_md_to_hwpx_to_md() {
         other => panic!("expected Block::List after roundtrip, got {other:?}"),
     }
 }
+
+#[test]
+fn blank_paragraph_with_list_like_para_pr_is_not_a_list_item() {
+    // `[table][space]` paragraphs are common; the space must not become `- `.
+    let xml = concat!(
+        r#"<root><hp:p paraPrIDRef="50"><hp:run><hp:tbl colCnt="1"><hp:tr><hp:tc><hp:subList>"#,
+        r#"<hp:p paraPrIDRef="1"><hp:run><hp:t>칸</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>"#,
+        r#"</hp:tbl><hp:t> </hp:t></hp:run></hp:p></root>"#,
+    );
+    let s = parse_section_xml(xml).expect("parse");
+    assert!(
+        !s.blocks.iter().any(|b| matches!(b, ir::Block::List { .. })),
+        "blank paragraph must not be staged as a list item: {:?}",
+        s.blocks
+    );
+}

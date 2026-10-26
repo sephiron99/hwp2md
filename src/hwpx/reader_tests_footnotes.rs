@@ -235,3 +235,88 @@ fn resolve_bin_refs_inside_list() {
         other => panic!("expected List, got {other:?}"),
     }
 }
+
+// -----------------------------------------------------------------------
+// OWPML notes: <hp:ctrl><hp:footNote> inside the paragraph that marks it
+// -----------------------------------------------------------------------
+
+fn texts(inlines: &[ir::Inline]) -> Vec<String> {
+    inlines
+        .iter()
+        .map(|i| match &i.footnote_ref {
+            Some(id) => format!("[^{id}]"),
+            None => i.text.clone(),
+        })
+        .collect()
+}
+
+#[test]
+fn owpml_footnote_keeps_the_paragraph_around_it() {
+    let xml = concat!(
+        r#"<root><hp:p><hp:run><hp:t>즉, 그 처분이 ① </hp:t></hp:run>"#,
+        r#"<hp:run><hp:t>범행 중 범죄장소의 압수</hp:t><hp:ctrl>"#,
+        r#"<hp:footNote number="1" suffixChar="41" instId="17"><hp:subList>"#,
+        r#"<hp:p paraPrIDRef="29"><hp:run><hp:ctrl><hp:autoNum num="1" numType="FOOTNOTE"/></hp:ctrl>"#,
+        r#"<hp:t>예를 들어 112 신고</hp:t></hp:run></hp:p>"#,
+        r#"</hp:subList></hp:footNote></hp:ctrl><hp:t>, 같은 run</hp:t></hp:run>"#,
+        r#"<hp:run><hp:t> 중 어디에 해당하는지</hp:t></hp:run></hp:p></root>"#,
+    );
+    let s = section(xml);
+    // The note paragraph's paraPrIDRef="29" must not leak out: a leak would
+    // turn the outer paragraph into a list item.
+    assert_eq!(s.blocks.len(), 2, "paragraph then its note: {:?}", s.blocks);
+    match &s.blocks[0] {
+        ir::Block::Paragraph { inlines } => assert_eq!(
+            texts(inlines),
+            [
+                "즉, 그 처분이 ① ",
+                "범행 중 범죄장소의 압수",
+                "[^1]",
+                ", 같은 run",
+                " 중 어디에 해당하는지"
+            ]
+        ),
+        other => panic!("expected the outer Paragraph first, got {other:?}"),
+    }
+    let ir::Block::Footnote { id, content } = &s.blocks[1] else {
+        panic!(
+            "expected Footnote after the paragraph, got {:?}",
+            s.blocks[1]
+        );
+    };
+    assert_eq!(id, "1");
+    match &content[..] {
+        [ir::Block::Paragraph { inlines }] => assert_eq!(texts(inlines), ["예를 들어 112 신고"]),
+        other => panic!("expected one Paragraph in the note, got {other:?}"),
+    }
+}
+
+#[test]
+fn owpml_endnote_ids_do_not_collide_with_footnotes() {
+    let note = |tag: &str| {
+        format!(
+            r#"<hp:ctrl><hp:{tag} number="1"><hp:subList><hp:p><hp:run><hp:t>{tag}</hp:t></hp:run></hp:p></hp:subList></hp:{tag}></hp:ctrl>"#
+        )
+    };
+    let xml = format!(
+        r#"<root><hp:p><hp:run><hp:t>본문</hp:t>{}{}</hp:run></hp:p></root>"#,
+        note("footNote"),
+        note("endNote")
+    );
+    let s = section(&xml);
+    let ids: Vec<&str> = s
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            ir::Block::Footnote { id, .. } => Some(id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, ["1", "e1"]);
+    match &s.blocks[0] {
+        ir::Block::Paragraph { inlines } => {
+            assert_eq!(texts(inlines), ["본문", "[^1]", "[^e1]"]);
+        }
+        other => panic!("expected Paragraph, got {other:?}"),
+    }
+}

@@ -13,9 +13,16 @@ pub(super) fn handle_start_element(
     local: &str,
     e: &quick_xml::events::BytesStart,
     ctx: &mut ParseContext,
+    staged: &mut Vec<StagedBlock>,
 ) {
     match local {
         "p" | "hp:p" => {
+            // A paragraph inside a paragraph (footnote, table cell, text
+            // box …): keep the outer one to resume when this one ends.
+            if ctx.in_paragraph {
+                let saved = ctx.suspend_paragraph();
+                ctx.para_stack.push(saved);
+            }
             ctx.in_paragraph = true;
             ctx.current_text.clear();
             ctx.current_inlines.clear();
@@ -53,6 +60,12 @@ pub(super) fn handle_start_element(
             ctx.in_text = true;
         }
         "tbl" | "hp:tbl" => {
+            // Text before a table in the same paragraph comes before it.
+            if ctx.in_paragraph && ctx.at_top_level() {
+                if let Some(before) = flush_active_paragraph_scope(ctx) {
+                    staged.push(before);
+                }
+            }
             ctx.table.active = true;
             ctx.table.rows.clear();
             ctx.table.col_count = 0;
@@ -127,13 +140,36 @@ pub(super) fn handle_start_element(
         "baseText" | "hp:baseText" => {
             ctx.ruby_current_part = RubyPart::Base;
         }
-        "fn" | "hp:fn" | "footnote" | "hp:footnote" | "en" | "hp:en" | "endnote" | "hp:endnote" => {
+        "fn" | "hp:fn" | "footnote" | "hp:footnote" | "en" | "hp:en" | "endnote" | "hp:endnote"
+        | "footNote" | "hp:footNote" | "endNote" | "hp:endNote" => {
             let mut id = String::new();
+            let mut number = String::new();
             for attr in e.attributes().flatten() {
                 let key = std::str::from_utf8(attr.key.as_ref()).unwrap_or("");
-                if key == "id" || key == "hp:id" || key == "noteId" || key == "hp:noteId" {
-                    id = attr.unescape_value().unwrap_or_default().to_string();
-                    break;
+                let val = || attr.unescape_value().unwrap_or_default().to_string();
+                match key {
+                    "id" | "hp:id" | "noteId" | "hp:noteId" if id.is_empty() => id = val(),
+                    "number" | "hp:number" => number = val(),
+                    _ => {}
+                }
+            }
+            // OWPML notes (`<hp:ctrl><hp:footNote number="1">`) sit where
+            // the note mark is drawn and have no separate reference: number
+            // them and put the reference here.  Endnotes number on their own.
+            if matches!(local, "footNote" | "hp:footNote" | "endNote" | "hp:endNote") {
+                if id.is_empty() {
+                    if number.is_empty() {
+                        ctx.unnumbered_notes += 1;
+                        number = format!("n{}", ctx.unnumbered_notes);
+                    }
+                    id = if local.ends_with("endNote") {
+                        format!("e{number}")
+                    } else {
+                        number
+                    };
+                }
+                if ctx.in_paragraph && !ctx.footnote.active {
+                    ctx.push_inline(ir::Inline::footnote_ref(id.clone()));
                 }
             }
             ctx.footnote.active = true;
@@ -197,7 +233,12 @@ pub(super) fn handle_end_element(
                     staged.push(sb);
                 }
             }
-            ctx.in_paragraph = false;
+            if let Some(outer) = ctx.para_stack.pop() {
+                ctx.resume_paragraph(outer);
+            } else {
+                ctx.in_paragraph = false;
+                staged.extend(ctx.after_paragraph.drain(..).map(StagedBlock::Plain));
+            }
         }
         "run" | "hp:run" => {
             ctx.in_run = false;
@@ -325,14 +366,21 @@ pub(super) fn handle_end_element(
             ctx.in_ruby = false;
             ctx.ruby_current_part = RubyPart::None;
         }
-        "fn" | "hp:fn" | "footnote" | "hp:footnote" | "en" | "hp:en" | "endnote" | "hp:endnote" => {
+        "fn" | "hp:fn" | "footnote" | "hp:footnote" | "en" | "hp:en" | "endnote" | "hp:endnote"
+        | "footNote" | "hp:footNote" | "endNote" | "hp:endNote" => {
             flush_footnote_paragraph(ctx, CodeLangHint::Plain);
             if ctx.footnote.blocks.is_empty() {
                 ctx.footnote.id.clear();
             } else {
                 let id = std::mem::take(&mut ctx.footnote.id);
                 let content = std::mem::take(&mut ctx.footnote.blocks);
-                staged.push(StagedBlock::Plain(ir::Block::Footnote { id, content }));
+                let note = ir::Block::Footnote { id, content };
+                // A note read inside a paragraph goes after that paragraph.
+                if ctx.in_paragraph {
+                    ctx.after_paragraph.push(note);
+                } else {
+                    staged.push(StagedBlock::Plain(note));
+                }
             }
             ctx.footnote.active = false;
         }

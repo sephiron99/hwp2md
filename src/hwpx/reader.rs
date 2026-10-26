@@ -458,7 +458,7 @@ pub(crate) fn parse_section_xml_with_face_names(
             Ok(Event::Start(ref e)) => {
                 let local_name = e.local_name();
                 let local = std::str::from_utf8(local_name.as_ref()).unwrap_or("");
-                handle_start_element(local, e, &mut context);
+                handle_start_element(local, e, &mut context, &mut staged);
             }
             Ok(Event::End(ref e)) => {
                 let local_name = e.local_name();
@@ -507,6 +507,7 @@ pub(crate) fn parse_section_xml_with_face_names(
     if let Some(sb) = flush_paragraph_staged(&mut context) {
         staged.push(sb);
     }
+    staged.extend(context.after_paragraph.drain(..).map(StagedBlock::Plain));
 
     // Group consecutive list-paragraph sentinels into Block::List structures.
     section.blocks = group_list_paragraphs(staged);

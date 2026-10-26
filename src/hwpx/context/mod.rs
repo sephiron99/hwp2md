@@ -87,6 +87,31 @@ pub(crate) struct ParseContext {
 
     // ── Header / footer ────────────────────────────────────────────
     pub(crate) header_footer: HeaderFooterState,
+
+    // ── Nested paragraphs ──────────────────────────────────────────
+    /// Outer paragraphs set aside while a paragraph inside them (in a
+    /// footnote, table cell, text box …) is read; resumed when it ends.
+    pub(crate) para_stack: Vec<SavedParagraph>,
+    /// Footnotes of the open paragraph, staged after it.
+    pub(crate) after_paragraph: Vec<ir::Block>,
+    /// Number of OWPML notes seen so far without a `number` attribute.
+    pub(crate) unnumbered_notes: u32,
+}
+
+/// The paragraph-level state of a paragraph whose reading is suspended by a
+/// paragraph nested inside it.
+pub(crate) struct SavedParagraph {
+    in_run: bool,
+    in_text: bool,
+    text: String,
+    inlines: Vec<ir::Inline>,
+    heading_level: Option<u8>,
+    para_pr_id: Option<String>,
+    num_pr_id: Option<String>,
+    max_font_height: u32,
+    max_font_height_bold: bool,
+    fmt: FormattingState,
+    footnotes: Vec<ir::Block>,
 }
 
 /// Which child element of a `<hp:ruby>` block is currently being parsed.
@@ -127,11 +152,58 @@ impl Default for ParseContext {
             para_max_font_height_bold: false,
             page_layout: PageLayoutState::default(),
             header_footer: HeaderFooterState::default(),
+            para_stack: Vec::new(),
+            after_paragraph: Vec::new(),
+            unnumbered_notes: 0,
         }
     }
 }
 
 impl ParseContext {
+    /// Set the open paragraph aside, leaving its buffers empty.
+    pub(crate) fn suspend_paragraph(&mut self) -> SavedParagraph {
+        SavedParagraph {
+            in_run: self.in_run,
+            in_text: self.in_text,
+            text: std::mem::take(&mut self.current_text),
+            inlines: std::mem::take(&mut self.current_inlines),
+            heading_level: self.heading_level.take(),
+            para_pr_id: self.current_para_pr_id.take(),
+            num_pr_id: self.current_num_pr_id.take(),
+            max_font_height: self.para_max_font_height,
+            max_font_height_bold: self.para_max_font_height_bold,
+            fmt: std::mem::take(&mut self.fmt),
+            footnotes: std::mem::take(&mut self.after_paragraph),
+        }
+    }
+
+    /// Continue reading a paragraph set aside by [`Self::suspend_paragraph`].
+    pub(crate) fn resume_paragraph(&mut self, saved: SavedParagraph) {
+        self.in_paragraph = true;
+        self.in_run = saved.in_run;
+        self.in_text = saved.in_text;
+        self.current_text = saved.text;
+        self.current_inlines = saved.inlines;
+        self.heading_level = saved.heading_level;
+        self.current_para_pr_id = saved.para_pr_id;
+        self.current_num_pr_id = saved.num_pr_id;
+        self.para_max_font_height = saved.max_font_height;
+        self.para_max_font_height_bold = saved.max_font_height_bold;
+        self.fmt = saved.fmt;
+        // Footnotes of the inner paragraph (say, a table cell's) follow the
+        // outer one.
+        let inner = std::mem::replace(&mut self.after_paragraph, saved.footnotes);
+        self.after_paragraph.extend(inner);
+    }
+
+    /// No footnote, list item, table cell, header or footer is open.
+    pub(crate) fn at_top_level(&self) -> bool {
+        !self.footnote.active
+            && !self.list.in_item
+            && !self.table.in_cell
+            && !self.header_footer.in_either_active()
+    }
+
     /// Extract the accumulated `PageLayout` from the context.
     pub(crate) fn take_page_layout(&self) -> Option<ir::PageLayout> {
         self.page_layout.take()

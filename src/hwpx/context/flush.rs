@@ -309,7 +309,10 @@ pub(crate) fn flush_paragraph_staged(ctx: &mut ParseContext) -> Option<StagedBlo
     // Only Paragraph blocks are list-stageable: Heading and CodeBlock are always Plain.
     // A tier-4 regulation heading (e.g. "제1편 총칙") must not be re-staged as a ListPara
     // even if paraPrIDRef looks list-like; likewise a CodeBlock is never a list item.
-    let list_depth: Option<u32> = if matches!(block, ir::Block::Paragraph { .. }) {
+    // A blank paragraph (only spaces, e.g. the space after an inline table)
+    // stays Plain too: the writer drops it, while a list item would print `- `.
+    let list_depth: Option<u32> = if matches!(&block, ir::Block::Paragraph { inlines } if !is_blank(inlines))
+    {
         match para_pr_id.as_deref() {
             Some("2") => Some(0),
             Some("3") => Some(1),
@@ -330,6 +333,13 @@ pub(crate) fn flush_paragraph_staged(ctx: &mut ParseContext) -> Option<StagedBlo
     } else {
         StagedBlock::Plain(block)
     })
+}
+
+/// Only whitespace text: nothing a reader would see.
+fn is_blank(inlines: &[ir::Inline]) -> bool {
+    inlines
+        .iter()
+        .all(|i| i.footnote_ref.is_none() && i.ruby.is_none() && i.text.trim().is_empty())
 }
 
 /// An intermediate block produced during OWPML section parsing.

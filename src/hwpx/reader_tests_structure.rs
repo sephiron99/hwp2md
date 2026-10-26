@@ -390,3 +390,94 @@ fn ctrl_newpage_mid_paragraph_splits_into_three_ordered_blocks() {
         "paragraph text must not cross the page-break boundary"
     );
 }
+
+/// Paragraph text and tables of `section(xml)` in order, tables as `<표>`.
+fn flow(xml: &str) -> Vec<String> {
+    section(xml)
+        .blocks
+        .iter()
+        .map(|b| match b {
+            ir::Block::Paragraph { inlines } => inlines.iter().map(|i| i.text.as_str()).collect(),
+            ir::Block::Table { .. } => "<표>".to_string(),
+            other => format!("{other:?}"),
+        })
+        .collect()
+}
+
+fn paragraph_with_table(pos: &str) -> String {
+    format!(
+        concat!(
+            r#"<root><hp:p><hp:run><hp:t>표 앞</hp:t><hp:tbl colCnt="1">{}"#,
+            r#"<hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>칸</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr>"#,
+            r#"</hp:tbl><hp:t>표 뒤</hp:t></hp:run></hp:p></root>"#,
+        ),
+        pos
+    )
+}
+
+#[test]
+fn text_before_a_table_in_its_paragraph_stays_before_it() {
+    // Placed like a character, floating, or no <hp:pos>: document order.
+    for pos in [
+        r#"<hp:pos treatAsChar="1"/>"#,
+        r#"<hp:pos treatAsChar="0"/>"#,
+        "",
+    ] {
+        assert_eq!(
+            flow(&paragraph_with_table(pos)),
+            ["표 앞", "<표>", "표 뒤"],
+            "pos: {pos}"
+        );
+    }
+}
+
+#[test]
+fn tables_in_one_paragraph_keep_their_order() {
+    let table = |name: &str, treat_as_char: &str| {
+        format!(
+            r#"<hp:tbl colCnt="1"><hp:pos treatAsChar="{treat_as_char}"/><hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>{name}</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl>"#
+        )
+    };
+    let cell_texts = |xml: &str| -> Vec<String> {
+        section(xml)
+            .blocks
+            .iter()
+            .map(|b| match b {
+                ir::Block::Table { rows, .. } => match &rows[0].cells[0].blocks[0] {
+                    ir::Block::Paragraph { inlines } => format!("<{}>", inlines[0].text),
+                    other => format!("{other:?}"),
+                },
+                ir::Block::Paragraph { inlines } => {
+                    inlines.iter().map(|i| i.text.as_str()).collect()
+                }
+                other => format!("{other:?}"),
+            })
+            .collect()
+    };
+    // A floating table, then one placed like a character (0000.hwpx).
+    let xml = format!(
+        r#"<root><hp:p><hp:run>{}{}</hp:run></hp:p></root>"#,
+        table("가", "0"),
+        table("나", "1")
+    );
+    assert_eq!(cell_texts(&xml), ["<가>", "<나>"]);
+    // Text, then two floating tables.
+    let xml = format!(
+        r#"<root><hp:p><hp:run><hp:t>글</hp:t>{}{}</hp:run></hp:p></root>"#,
+        table("가", "0"),
+        table("나", "0")
+    );
+    assert_eq!(cell_texts(&xml), ["글", "<가>", "<나>"]);
+}
+
+#[test]
+fn text_box_after_a_table_in_one_paragraph_keeps_document_order() {
+    let xml = concat!(
+        r#"<root><hp:p><hp:run><hp:t>글</hp:t>"#,
+        r#"<hp:tbl colCnt="1"><hp:pos treatAsChar="0"/><hp:tr><hp:tc><hp:subList>"#,
+        r#"<hp:p><hp:run><hp:t>표</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl>"#,
+        r#"<hp:rect><hp:drawText><hp:subList><hp:p><hp:run><hp:t>상자</hp:t></hp:run></hp:p>"#,
+        r#"</hp:subList></hp:drawText></hp:rect></hp:run></hp:p></root>"#,
+    );
+    assert_eq!(flow(xml), ["글", "<표>", "상자"]);
+}

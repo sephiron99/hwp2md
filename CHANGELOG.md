@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into every logical grid position it spans. 9 new tests (5 unit +
   4 CLI subprocess integration tests against a real fixture).
 
+### Fixed
+- HWPX: a paragraph holding a footnote lost all of its text before the note.
+  Hancom's `<hp:footNote>`/`<hp:endNote>` (inside `<hp:ctrl>`) were not read
+  as notes, and any paragraph nested in a paragraph (a note, table cell or
+  text box) wiped the outer paragraph's pending text and style. The outer
+  paragraph is now set aside and resumed; notes get a `[^n]` reference where
+  they stand (endnotes `[^e1]`, …) and their definition after the paragraph.
+- HWPX: text before a table in the same paragraph now comes before the table
+  instead of being dropped, and text after it in the same run is kept.
+
 ## [0.5.0] - 2026-05-19
 
 ### Added

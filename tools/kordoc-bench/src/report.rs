@@ -51,15 +51,17 @@ pub fn score_all(docs: &[Doc], out: &Path, runs: [&Vec<Run>; 2]) -> Vec<DocResul
                     Some(m) => score::score(r, &mdtext::analyze(m)),
                     None => DocScore::failed(r),
                 };
-                if !s.missed.is_empty() || !s.noise_runs.is_empty() {
-                    let mut text = String::new();
-                    for (kind, unit, matched, total) in &s.missed {
-                        let _ = writeln!(text, "[{} {matched}/{total}] {unit}", kind.label());
-                    }
-                    for run in &s.noise_runs {
-                        let _ = writeln!(text, "[잡음 {}자] {run}", run.chars().count());
-                    }
-                    let path = out.join(tool).join(format!("{}.missed.txt", doc.idx));
+                let mut text = String::new();
+                for (kind, unit, matched, total) in &s.missed {
+                    let _ = writeln!(text, "[{} {matched}/{total}] {unit}", kind.label());
+                }
+                for run in &s.noise_runs {
+                    let _ = writeln!(text, "[잡음 {}자] {run}", run.chars().count());
+                }
+                // Written even when empty, so a file left by an earlier run
+                // in the same output directory never shows stale misses.
+                let path = out.join(tool).join(format!("{}.missed.txt", doc.idx));
+                if !text.is_empty() || path.exists() {
                     std::fs::write(path, text).ok();
                 }
                 result.scores[t] = Some(s);

@@ -1,0 +1,4 @@
+[resolver]
+# Cargo.lock is not committed, so pick dependency versions that still
+# support `package.rust-version` (MSRV) instead of the newest release.
+incompatible-rust-versions = "fallback"

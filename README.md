@@ -140,6 +140,43 @@ hwp2md --log-level debug to-md report.hwpx
 hwp2md --log-level warn  to-md report.hwpx -o report.md
 ```
 
+## MCP 서버
+
+`hwp2md-mcp`는 Claude 등 MCP 클라이언트가 `.hwpx` 문서를 Markdown으로 읽게 해 주는 MCP 서버입니다(stdio).
+지정한 폴더(`--root`) 안의 파일만 읽고, 파일을 쓰지 않습니다.
+
+```bash
+cargo install --path crates/hwp2md-mcp
+
+# Claude Code에 등록
+claude mcp add hwp2md -- hwp2md-mcp --root ~/문서
+```
+
+Claude Desktop은 설정 파일(`claude_desktop_config.json`)에 등록합니다. Windows라면 Windows용으로 빌드한 실행 파일을 씁니다.
+
+```json
+{
+  "mcpServers": {
+    "hwp2md": { "command": "hwp2md-mcp", "args": ["--root", "C:\\Users\\me\\Documents"] }
+  }
+}
+```
+
+| 도구 | 하는 일 |
+|------|---------|
+| `hwpx_to_markdown` | 문서를 Markdown으로. 긴 문서는 나눠서 주고, 끝에 다음 `offset`을 알려 줌 |
+| `hwpx_info` | 제목·저자와 구역·문단·표·그림·각주·글자 수 |
+| `hwpx_tables` | 표를 행·칸(글, colspan, rowspan) 데이터로. `index`로 표 하나만 |
+| `list_hwpx` | 폴더 안의 `.hwpx` 목록 (`.hwp`는 개수만) |
+
+| 옵션 | 기본값 | 뜻 |
+|------|--------|----|
+| `--root DIR` | 현재 폴더 | 읽을 수 있는 폴더. 여러 번 줄 수 있고, 상대 경로는 첫 폴더 기준 |
+| `--max-chars N` | 40000 | 한 번에 돌려주는 최대 글자 수 |
+
+허용 폴더 밖 경로(`..`, 심볼릭 링크 포함)는 거부합니다. 로그는 표준 오류로만 나갑니다.
+Claude.ai 웹이나 ChatGPT처럼 원격(HTTP) MCP만 받는 곳에는 아직 붙일 수 없습니다.
+
 ## 라이브러리 사용법
 
 `Cargo.toml`에 추가:

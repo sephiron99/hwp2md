@@ -142,6 +142,43 @@ hwp2md --log-level debug to-md report.hwpx
 hwp2md --log-level warn  to-md report.hwpx -o report.md
 ```
 
+## MCP Server
+
+`hwp2md-mcp` is an MCP server (stdio) that lets Claude and other MCP clients read `.hwpx` documents as Markdown.
+It reads only files inside the `--root` folders and never writes files.
+
+```bash
+cargo install --path crates/hwp2md-mcp
+
+# Register with Claude Code
+claude mcp add hwp2md -- hwp2md-mcp --root ~/Documents
+```
+
+For Claude Desktop, add it to `claude_desktop_config.json` (on Windows, use a Windows build of the binary):
+
+```json
+{
+  "mcpServers": {
+    "hwp2md": { "command": "hwp2md-mcp", "args": ["--root", "C:\\Users\\me\\Documents"] }
+  }
+}
+```
+
+| Tool | What it does |
+|------|--------------|
+| `hwpx_to_markdown` | The document as Markdown; long documents come in pages, each ending with the next `offset` |
+| `hwpx_info` | Title, author and counts of sections, paragraphs, tables, images, footnotes, characters |
+| `hwpx_tables` | Tables as rows of cells (text, colspan, rowspan); `index` for one table |
+| `list_hwpx` | `.hwpx` files in a folder (`.hwp` files are only counted) |
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--root DIR` | current folder | Folder the server may read; repeatable; relative paths start at the first |
+| `--max-chars N` | 40000 | Most characters in one answer |
+
+Paths outside the allowed folders (via `..` or symbolic links too) are refused; logs go to standard error only.
+Clients that take only remote (HTTP) MCP servers, such as Claude.ai on the web or ChatGPT, are not supported yet.
+
 ## Library Usage
 
 Add to `Cargo.toml`:

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MCP server** `hwp2md-mcp` (`crates/hwp2md-mcp`, separate binary, stdio):
+  `hwpx_to_markdown` (paged by `offset`), `hwpx_info`, `hwpx_tables` and
+  `list_hwpx`, all read-only. Files are read only inside the `--root`
+  folders (`..` and symbolic links included); answers are capped by
+  `--max-chars`. Built on the official Rust SDK `rmcp`.
+- `convert::read_document`: read an `.hwpx` into the IR with the same
+  extension checks as the CLI (`.hwp` gets the save-as-`.hwpx` hint).
+
 ### Deprecated
 - **Markdown → HWPX** (`to-hwpx`, `convert` from `.md` to `.hwpx`,
   `convert::to_hwpx`, `hwpx::write_hwpx`) is deprecated and no longer

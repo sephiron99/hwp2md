@@ -1,67 +1,56 @@
 # hwp2md — Implementation Plan
 
-HWP/HWPX ↔ Markdown 양방향 변환기 (Rust)
+HWPX → Markdown 변환기 (Rust). Markdown → HWPX는 deprecated.
 
 ## 목표
 
-한글(HWP/HWPX) 문서를 Markdown으로, Markdown을 HWPX 문서로 변환하는 CLI 도구 + 라이브러리.
-모든 HWP 파싱/생성 코드를 자체 구현 — 라이선스 독립성 확보.
+한글 HWPX 문서를 **LLM이 읽기 좋은** Markdown으로 변환하는 CLI 도구 + 라이브러리.
+모든 HWPX 파싱 코드를 자체 구현 — 라이선스 독립성 확보.
+
+> 현재 상태 (2026-11-04)
+> - HWP 5.0 바이너리(`.hwp`)는 지원하지 않음 (`20f5d5b`에서 완전 제거). 한컴오피스에서 `.hwpx`로 저장 후 변환.
+> - Markdown → HWPX는 deprecated, 개발 중지 (`9e34263`). 한컴오피스에서 열리는 것까지만 확인.
+> - 품질은 `tools/kordoc-bench`로 kordoc과 비교해 잰다 (아래 "kordoc-bench" 참고).
 
 ## 설계 원칙
 
 1. **라이선스 독립**: HWP 전용 크레이트(unhwp, hwpforge, hwpers 등) 미사용
-2. **Generic 의존성만 사용**: cfb, zip, quick-xml, flate2, comrak 등 범용 크레이트
+2. **Generic 의존성만 사용**: zip, quick-xml, comrak 등 범용 크레이트
 3. **IR 기반 아키텍처**: 포맷별 reader/writer가 공통 IR을 통해 변환
 4. **점진적 구현**: 텍스트 추출 → 서식 → 테이블 → 이미지 → 수식 순
 
 ## 의존성
 
 ```toml
-# 컨테이너/압축 (범용)
-cfb = "0.14"           # OLE2/CFB — HWP 5.0 컨테이너
 zip = "2.0"            # ZIP — HWPX 컨테이너
-flate2 = "1.0"         # Zlib — HWP 스트림 압축
-
-# 파싱 (범용)
 quick-xml = "0.37"     # XML — HWPX 콘텐츠
-byteorder = "1.5"      # 바이트 오더 — HWP 레코드
-encoding_rs = "0.8"    # 문자 인코딩
-
-# Markdown (범용)
 comrak = "0.34"        # GFM Markdown 파서/렌더러
-
-# CLI/유틸 (범용)
-clap = "4"
-serde = "1"
-thiserror = "2"
-anyhow = "1"
-tracing = "0.1"
+clap = "4"             # CLI
+rayon = "1.10"         # batch 병렬 변환
+serde = "1"; serde_yml = "0.0.12"   # 스타일 템플릿(YAML)
+thiserror = "2"; anyhow = "1"
+tracing = "0.1"; tracing-subscriber = "0.3"
 ```
+
+HWP 전용이던 `cfb`, `flate2`, `aes`, `byteorder`는 HWP 지원 제거와 함께 뺐다.
 
 ## 아키텍처
 
 ```
-HWP 5.0 ──→ hwp::reader (CFB+zlib+record) ──→ IR ──→ md::writer ──→ Markdown
-HWPX    ──→ hwpx::reader (ZIP+XML)        ──→ IR ──→ md::writer ──→ Markdown
+HWPX     ──→ hwpx::reader (ZIP+XML) ──→ table_layout ──→ IR ──→ md::writer ──→ Markdown
 
-Markdown ──→ md::parser (comrak)           ──→ IR ──→ hwpx::writer ──→ HWPX
+Markdown ──→ md::parser (comrak)    ──→ IR ──→ hwpx::writer ──→ HWPX   (deprecated)
 ```
 
-### HWP 5.0 Record Format
+HWPX 읽기의 핵심 규칙 (2026-10~11 작업):
 
-```
-┌─────────────────────────────────────────┐
-│ 4-byte Header (Little Endian)           │
-│   bits  0-9:  tag_id (0x3FF mask)       │
-│   bits 10-19: level   (0x3FF mask)      │
-│   bits 20-31: size    (0xFFF mask)      │
-│   if size == 0xFFF → 4-byte extended    │
-├─────────────────────────────────────────┤
-│ data[size]                              │
-└─────────────────────────────────────────┘
-```
-
-Text: UTF-16LE, control chars 0x0000-0x001F (extended controls use 8 code units)
+- **문단 안의 문단**: 각주·표 칸·글상자처럼 문단 안에서 문단이 열리면 바깥 문단을 보관했다가 되살린다.
+- **표 안의 표**: 표 상태를 스택으로 쌓는다. 안쪽 표는 그 칸의 블록이 된다.
+- **보이는 표만 표로** (`hwpx/table_layout.rs`): `header.xml` `borderFill`로 칸 변이 보이는지 보고, 선이 있는 행 묶음만
+  표로 남긴다. 테두리 없는 행은 칸 내용을 읽는 순서대로 문단으로, 1열 표·1×1 상자는 내용만 낸다.
+  테두리 정보가 없는 표는 그대로 둔다.
+- **누름틀 안내문**: `CLICK_HERE`·`dirty≠1`이고 글이 `Direction` 안내 글과 같으면 내지 않는다(한글이 인쇄하지 않음).
+- **각주·미주**: OWPML `<hp:ctrl><hp:footNote>`/`<hp:endNote>`를 읽고, 그 자리에 `[^n]`(미주 `[^eN]`), 정의는 문단 뒤.
 
 ### 중간 표현 (IR)
 
@@ -87,24 +76,25 @@ Document
 
 ```
 src/
-├── main.rs          — CLI (to-md, to-hwpx, info)
-├── lib.rs           — 모듈 선언
-├── convert.rs       — 변환 오케스트레이터
-├── error.rs         — 에러 타입
-├── ir.rs            — 중간 표현
-├── hwp/
-│   ├── mod.rs       — HWP 모듈 공개 인터페이스
-│   ├── model.rs     — HWP 내부 모델 (FileHeader, DocInfo, Section, Paragraph)
-│   ├── record.rs    — 레코드 파싱 (4-byte header, tag constants)
-│   └── reader.rs    — CFB → zlib → records → IR 변환
+├── main.rs            — CLI (to-md, to-hwpx(deprecated), info, check, convert, batch)
+├── lib.rs / convert.rs / error.rs / ir.rs / style.rs / url_util.rs
+├── heading_style.rs   — 제목 스타일·법령 패턴 감지
 ├── hwpx/
-│   ├── mod.rs       — HWPX 모듈 공개 인터페이스
-│   ├── reader.rs    — ZIP+XML → IR 변환
-│   └── writer.rs    — IR → HWPX (ZIP+XML) 생성
+│   ├── reader.rs      — ZIP+XML → IR (header.xml: 글꼴·테두리·메타데이터)
+│   ├── handlers.rs    — XML 이벤트 처리 (문단·표·각주·누름틀 …)
+│   ├── context/       — 파싱 상태 (문단 스택, 표 스택, 각주, 누름틀 표시)
+│   ├── table_layout.rs — 보이는 표 판정·배치
+│   └── writer*.rs     — IR → HWPX (deprecated)
 └── md/
-    ├── mod.rs       — Markdown 모듈 공개 인터페이스
-    ├── writer.rs    — IR → Markdown 렌더러
-    └── parser.rs    — Markdown → IR 파서 (comrak)
+    ├── writer.rs      — IR → Markdown (표 칸 안 표는 HTML 중첩, 칸 안 줄바꿈 <br>)
+    ├── parser.rs      — Markdown → IR (comrak)
+    └── html_table.rs  — HTML <table> → IR (중첩 표·<br> 지원)
+tools/kordoc-bench/    — kordoc과 출력 비교 벤치 (workspace 멤버, publish=false)
+crates/hwp2md-mcp/     — MCP 서버 (별도 바이너리, stdio, rmcp)
+├── server.rs          — 도구 4개 (hwpx_to_markdown / hwpx_info / hwpx_tables / list_hwpx), 읽기 전용
+├── sandbox.rs         — --root 폴더 밖 경로 거부 (canonicalize, 심볼릭 링크 포함)
+├── paging.rs          — 긴 Markdown을 --max-chars 단위로 나눠 offset으로 이어 받기
+└── doc.rs             — IR에서 문서 정보·표 데이터 추출
 ```
 
 ## 구현 단계
@@ -115,24 +105,12 @@ src/
 
 - [x] 1.1 Cargo.toml — HWP 전용 크레이트 제거, generic 의존성만
 - [x] 1.2 IR 설계 — Document/Section/Block/Inline 계층 + Asset
-- [x] 1.3 HWP reader — CFB + zlib + record parsing + UTF-16LE text
+- [x] 1.3 HWP reader — CFB + zlib + record parsing + UTF-16LE text (이후 제거됨)
 - [x] 1.4 HWPX reader — ZIP + XML 파싱
 - [x] 1.5 MD writer — IR → Markdown (GFM 호환)
 - [x] 1.6 MD parser — Markdown → IR (comrak 기반)
 - [x] 1.7 HWPX writer — IR → HWPX (ZIP+XML 생성)
 - [x] 1.8 Convert 오케스트레이터 — to-md, to-hwpx, info 명령
-
-### Phase 2: HWP 파싱 고도화 (1주)
-
-HWP 5.0 파서 정확도 향상.
-
-- [ ] 2.1 테이블 파싱 — CTRL_TABLE + LIST_HEADER + 셀 내 paragraphs
-- [ ] 2.2 이미지/바이너리 — BinData 참조 + 이미지 추출
-- [ ] 2.3 하이퍼링크 — CTRL 오브젝트에서 URL 추출
-- [ ] 2.4 각주/미주 — CTRL_FOOTNOTE/CTRL_ENDNOTE 파싱
-- [ ] 2.5 수식 — EQEDIT 스크립트 → LaTeX 변환
-- [ ] 2.6 DRM/암호화 감지 — 명확한 에러 메시지
-- [ ] 2.7 샘플 테스트 — 다양한 HWP 파일로 검증
 
 ### Phase 3: HWPX 파싱 고도화 (1주)
 
@@ -194,12 +172,13 @@ HWPX XML 파서 정확도 향상.
 
 ## 제한사항
 
-- HWP DRM (배포용) 문서는 지원하지 않음
+- HWP 5.0 바이너리(`.hwp`)는 입력·출력 모두 지원하지 않음
+- Markdown → HWPX는 deprecated — 한컴오피스에서 열리지만 OWPML과 다른 부분이 남음
+  (알려진 차이는 `tests/hwpx_validation.rs`의 목록)
 - 다단 레이아웃은 단일 단으로 평탄화
-- 복잡한 테이블 (colspan/rowspan)은 HTML 폴백
-- 머리글/바닥글은 `<!-- header/footer -->` HTML 코멘트 마커로 round-trip
-- MD → HWP (바이너리)는 지원하지 않음 — HWPX만 출력
-- 한글 수식 → LaTeX 변환은 기본적인 수준만 지원
+- 복잡한 테이블 (colspan/rowspan)·표 안의 표는 HTML 폴백
+- 머리말/꼬리말: OWPML `<hp:ctrl><hp:header>`를 머리말로 인식하지 못해 본문 글로 나옴
+- 한글 수식은 스크립트를 그대로 출력 (LaTeX 변환 없음)
 
 ## Sprint 90 완료 (2026-05-30)
 
@@ -307,7 +286,7 @@ R5/G001·G002 pre-verification에서 로그된 NG3(별표 2 dropped-table + null
 
 - **TableFormat**: ✅ `Html`/`Grid`/`Repeat` enum(`src/convert.rs`) + `ConvertOptions` `#[non_exhaustive]`/`table_format` 빌더 + `--table-format` CLI 플래그(`to-md`, 기본 html). 공개 `to_markdown`/`write_markdown` 시그니처 불변(Html 기본값으로 위임) — 기존 40개+ 호출부 무영향. Grid 모드는 Pandoc 공식 매뉴얼 실 예제로 문법 검증(colspan 경계 병합 + rowspan 연속선분 blank 처리). 적대적 레드팀 8케이스 중 2건에서 rowspan 경계선 렌더링 실버그 발견·수정·영구 회귀 테스트 고정. 9 신규 테스트(유닛 5 + 실 바이너리 subprocess CLI 통합 4). 1330 lib + 27 integration suites 통과, clippy clean, fmt clean.
 
-## Sprint 103 계획 (미착수 — 사용자 승인 대기)
+## Sprint 103 계획 (종결 — 2026-10-26, 아래 "2026-10~11 작업"에서 처리 후 deprecated로 전환)
 
 **착수 배경**: `to-hwpx` 실사용 첫 사례에서 실제 한컴오피스가 산출물을 "손상됨"으로 거부하는 결함 발견(`hwp2md check`는 OK 반환 — 자기참조 검증의 한계가 실사용에서 처음 드러남). Issue [#1](https://github.com/hephaex/hwp2md/issues/1) 등록. R5("사람 검증 골든 준비")가 "사용자 위임"으로 막혀 있던 근본 원인과 동일 갭.
 
@@ -321,6 +300,70 @@ R5/G001·G002 pre-verification에서 로그된 NG3(별표 2 dropped-table + null
 - **R (여력 되면, 별도 승인)**: 한컴오피스 체험판 확보해 1회성 수동 검증 파이프라인 구축 — R5를 막던 "한컴 렌더 대조 불가"를 근본적으로 깨는 유일한 방법이나 별도 트랙.
 
 **Demo Gate**: P1~P2는 diff 결과 + 수정 후 재diff(구조 불일치 0건)를 커밋에 포함. P5는 실행 로그(경고 문구 출력 확인)로 증명.
+
+**결과**: 한컴오피스가 멈춘 원인은 패키지 파일(`content.hpf`·`container.xml`·`version.xml`) 형식이었다. 사용자가 진단 파일로
+한컴오피스에서 확인했고 `b26df8a`에서 고쳐 열리는 것을 확인했다. 이후 `to-hwpx`는 deprecated로 표시하고 개발을 멈췄다(`9e34263`).
+P1·P3는 kordoc 생성기·실제 한글 파일과의 비교와 `polaris_dvc` 스키마 검증으로 대신했다. 남은 OWPML 구조 정리(쪽 설정 위치·표 구조·
+`subList` 속성·제목 스타일 속성 이름)는 한컴오피스에서 확인하지 않아 커밋하지 않고 `target/md2hwpx-owpml-wip.patch`에 남겼다
+(`target/`은 `cargo clean`으로 지워지므로 필요하면 옮길 것).
+
+## 2026-10~11 작업 (HWPX → Markdown 품질, kordoc 비교)
+
+`d279f82`..`9e34263`, 원격 푸시 완료.
+
+- **CLI**: `batch` 하위 디렉토리 재귀 + 구조 유지, rayon 병렬 변환.
+- **HWP 지원 제거** (`20f5d5b`, BREAKING).
+- **kordoc-bench** (`tools/kordoc-bench`): 말뭉치 표본을 hwp2md·kordoc으로 변환해 HWPX XML에서 직접 뽑은 정답과 비교.
+  이 도구의 채점(글 재현율·잡음·읽기 순서·어절·표 모양)과 kordoc 자체 채점기(`bench/compare-md-parsers.mjs`)를 함께 보고.
+  정답 표 = 한글 화면에 보이는 표(kordoc `visible-tables.mjs`와 같은 정의, 따로 구현; 표본 1,178개 중 1,177개 일치).
+- **HWPX 읽기 수정**: 각주가 든 문단 글 누락, 표 안의 표 덮어쓰기, 보이는 표만 표로, 누름틀 안내문 빼기 (위 "아키텍처" 참고).
+- **Markdown 출력**: 칸 안 표는 HTML 중첩, 칸 안 줄바꿈은 `<br>`.
+- **Markdown → HWPX**: 칸 안 표·`<br>` 왕복, 한컴오피스에서 멈추던 패키지 형식, 칸 테두리·주소 수정 후 deprecated.
+
+**kordoc-bench 결과** (말뭉치 3,343개 중 200개, seed 1. "작업 전" = HWP 제거 직후 코드, 같은 채점 기준)
+
+| 지표 | 작업 전 | 현재 | kordoc |
+|---|---:|---:|---:|
+| 글 재현율 | 95.24% | 99.98% | 99.88% |
+| 표 칸 글 재현율 | 89.58% | 99.95% | 99.91% |
+| 읽기 순서 | 95.19% | 99.73% | 99.84% |
+| 잡음 | 0.83% | 0.08% | 0.18% |
+| 표 모양 일치 (정답: 보이는 표 1,178) | 65.87% | 100% | 100% |
+| kordoc 채점기 글 누락 0 문서 | 109/200 | 191/200 | 199/200 |
+| kordoc 채점기 표 완전 일치 | 59.68% | 99.83% | 99.91% |
+| kordoc 채점기 칸 F1 | 0.771 | 0.995 | 0.997 |
+| 문서당 변환 시간 (중앙값) | — | 약 0.8 ms | 약 20 ms |
+
+실행: `cargo run --release -p kordoc-bench -- --corpus <말뭉치> --sample 200 --seed 1` (kordoc 체크아웃 `~/prj/kordoc` 빌드 필요).
+말뭉치·결과물에는 민감한 문서가 들어 있으므로 `target/` 밖으로 내보내거나 커밋하지 않는다.
+
+## MCP 서버 (2026-11-04)
+
+`crates/hwp2md-mcp`: 별도 바이너리 `hwp2md-mcp`, stdio 통신, 공식 Rust SDK `rmcp` 3.8.
+도구 4개 모두 읽기 전용. 본체에는 `convert::read_document`(확장자 확인 + 읽기)만 더함.
+테스트: 단위 6 + 실제 바이너리를 stdio로 띄우는 통합 4. 실제 문서 0006(119,147자, 표 72)으로 쪽 나누기·표 확인.
+Claude Code·Desktop(로컬 stdio)에 붙음. Claude.ai 웹·ChatGPT는 원격 HTTP만 받으므로 아직 안 됨.
+
+후속 후보: HTTP(Streamable HTTP) 통신 + 경로 대신 파일 내용(base64) 입력 도구 — 원격 클라이언트용.
+원격으로 쓰면 문서가 PC 밖으로 나가므로 민감 문서는 사내망 안에서만. 그림 내용 반환(`include_images`)도 후보.
+
+## 다음 후보 (미착수 — 사용자 승인 후)
+
+- **글자 크기 기반 위계**: 앞 문단보다 글자가 작은 문단은 level +1, 같으면 같은 level, 크면 스택에서 되돌아감.
+  본문 크기(글자가 가장 많은 크기)보다 큰 문단만 제목으로, 본문보다 작은 문단(※ 참고)은 위 항목에 딸린 문단으로.
+  본문 흐름 문단끼리만 비교(빈 문단·표·그림 건너뜀, 표 칸 안 제외), 0.5pt 이내는 같은 크기, 문단 크기는 글자 수 가중 대표값.
+  스타일 이름·개요 번호가 있으면 그것이 우선. 표본 확인: 0000(16/14/13/12pt)은 잘 맞고, 0002 개조식(□◦- 모두 15pt)·
+  0071 법령(전부 13pt)은 위계를 못 잡음 → 기호·번호 위계는 별도 규칙 필요.
+  **전제**: `header.xml` `hh:charPr height`를 `charPrIDRef`로 읽기(지금은 읽지 않음). 검증용 제목 정답 지표도 필요.
+- **header 글자 모양 읽기**: 굵게·기울임·밑줄 등을 `charPrIDRef`로 읽기. 색은 `<span style>` 잡음이 되므로 낼지 결정 필요.
+- **제목 과다 감지**: 벤치 제목 줄 수 453 대 kordoc 197. 원인 추정(미확인): 숫자 `styleIDRef` 1~6을 제목 수준으로 보는
+  규칙이 한글 문서의 스타일 id(1=본문 등)를 제목으로 오인.
+- **목록 오인**: `paraPrIDRef ≥ 4`면 목록 항목으로 보는 규칙 때문에 본문 문단에 `  -  `가 붙음.
+- **머리말/꼬리말**: OWPML `<hp:ctrl><hp:header>`/`<hp:footer>` 인식 (지금은 `<hp:headerFooter>` 감싸개만 인식).
+- **`--help` 영어/한국어**: 실행 시 언어 선택 — `HWP2MD_LANG` > `LC_ALL`/`LC_MESSAGES`/`LANG` > `sys-locale`(Windows),
+  영어 doc comment 기본 + 한국어 표로 `mut_subcommand`/`mut_arg` 교체, 누락 검사 테스트. clap 오류 문구는 영어로 남음.
+- **남은 kordoc 차이**: kordoc 채점기 글 누락 0 문서 191 대 199 — 원인 미조사.
+- 그 밖: 분수 칸 합치기(드묾), 1×1 상자를 인용 블록으로 내는 옵션.
 
 ## 라이선스
 

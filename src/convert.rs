@@ -84,24 +84,7 @@ pub fn to_markdown_with_table_format(
     frontmatter: bool,
     table_format: TableFormat,
 ) -> Result<(), Hwp2MdError> {
-    let ext = input
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    let doc = match ext.as_str() {
-        "hwp" => return Err(hwp_unsupported()),
-        "hwpx" => {
-            tracing::info!("Parsing HWPX: {:?}", input);
-            hwpx::read_hwpx(input)?
-        }
-        _ => {
-            return Err(Hwp2MdError::UnsupportedFormat(format!(
-                ".{ext}. Expected .hwpx"
-            )))
-        }
-    };
+    let doc = read_document(input)?;
 
     if let Some(dir) = assets_dir {
         write_assets(&doc, dir)?;
@@ -195,22 +178,36 @@ pub fn to_hwpx(
 /// Returns [`Hwp2MdError::UnsupportedFormat`] for unknown extensions and
 /// propagates parse errors from the underlying readers.
 pub fn show_info(input: &Path) -> Result<(), Hwp2MdError> {
+    let doc = read_document(input)?;
+    print_info(&doc, input);
+    Ok(())
+}
+
+/// Read an `.hwpx` file into the intermediate representation.
+///
+/// The extension decides: `.hwp` fails with a hint to save the document as
+/// `.hwpx`, anything else but `.hwpx` with [`Hwp2MdError::UnsupportedFormat`].
+///
+/// # Errors
+///
+/// Returns [`Hwp2MdError::UnsupportedFormat`] for other extensions and
+/// propagates read and parse errors.
+pub fn read_document(input: &Path) -> Result<ir::Document, Hwp2MdError> {
     let ext = input
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
-
     match ext.as_str() {
-        "hwp" => return Err(hwp_unsupported()),
+        "hwp" => Err(hwp_unsupported()),
         "hwpx" => {
-            let doc = hwpx::read_hwpx(input)?;
-            print_info(&doc, input);
+            tracing::info!("Parsing HWPX: {:?}", input);
+            hwpx::read_hwpx(input)
         }
-        _ => return Err(Hwp2MdError::UnsupportedFormat(format!(".{ext}"))),
+        _ => Err(Hwp2MdError::UnsupportedFormat(format!(
+            ".{ext}. Expected .hwpx"
+        ))),
     }
-
-    Ok(())
 }
 
 /// Auto-detect the conversion direction from the input/output file extensions

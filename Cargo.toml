@@ -42,7 +42,8 @@ zip = { version = "2.0", default-features = false, features = ["deflate"] }
 quick-xml = { version = "0.37", features = ["serialize"] }
 
 # Markdown
-comrak = "0.34"
+# syntect(onig C 라이브러리)·cli 기능은 쓰지 않는다. 기본 기능을 끄면 i686-pc-windows-msvc로 교차 빌드된다.
+comrak = { version = "0.34", default-features = false }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
